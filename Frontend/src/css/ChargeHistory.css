@@ -1,0 +1,27 @@
+.section-header {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.history-summary {
+	display: flex;
+	gap: 24px;
+	margin-bottom: 8px;
+}
+
+.table-wrap {
+	overflow-x: auto;
+}
+
+.charge-history table {
+	border-collapse: collapse;
+	width: 100%;
+}
+
+.charge-history th,
+.charge-history td {
+	text-align: left;
+	padding: 4px 8px;
+	border: 1px solid;
+}

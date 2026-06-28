@@ -1,0 +1,10 @@
+.vehicle-status table {
+	border-collapse: collapse;
+	width: 100%;
+}
+
+.vehicle-status th, .vehicle-status td {
+	text-align: left;
+	padding: 4px 8px;
+	border: 1px solid;
+}
