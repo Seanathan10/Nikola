@@ -21,10 +21,19 @@ use std::{
 };
 
 use crate::{
-	AppState
+	AppState,
+	db::{
+		get_access_token
+	}
 };
 
-#[derive( Debug, Serialize, Deserialize, Clone )]
+use sqlx::{
+	prelude::{
+		FromRow
+	}
+};
+
+#[derive( Debug, Serialize, Deserialize, Clone, FromRow )]
 pub struct TokenData {
 	pub access_token: String,
 	pub refresh_token: String,
@@ -44,12 +53,15 @@ struct TokenResponse {
 	expires_in: i64
 }
 
-
 pub async fn get_valid_access_token( state: &Arc<AppState> ) -> Option<String> {
 	let now = chrono::Utc::now().timestamp();
 
 	{
-		let token = state.token.lock().unwrap();
+		let token: TokenData = match get_access_token( &state.database, user_id ).await {
+			Some( tokendata ) => tokendata,
+			None => { println!( "No token found for user." ); }
+		}
+
 		if let Some( t ) = token.as_ref() {
 			if now < t.expires_at - 60 {
 				return Some( t.access_token.clone() );
@@ -131,6 +143,7 @@ pub async fn callback(
 ) -> Redirect {
 	let code_verifier = {
 		let mut pkce = app_state.pending_pkce.lock().unwrap();
+
 		match pkce.as_ref() {
 			Some( ( stored_state, _ ) ) if stored_state == &params.state => {
 				pkce.take().map( | ( _, v ) | v )

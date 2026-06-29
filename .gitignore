@@ -2,6 +2,11 @@ node_modules
 dist
 .env
 
+Testing/
+
+tesla.db
+tesla.db*
+
 private-key.pem
 access-key.txt
 
