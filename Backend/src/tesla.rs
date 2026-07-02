@@ -8,7 +8,8 @@ use crate::{
 	},
 
 	auth::{
-		get_valid_access_token
+		get_valid_access_token,
+		CurrentUser
 	},
 
 	proto::{
@@ -54,10 +55,7 @@ use serde_json::{
 
 use std::{
 	sync::{
-		Arc,
-		atomic::{
-			Ordering
-		}
+		Arc
 	},
 	time::{
 		Duration
@@ -91,13 +89,6 @@ impl VehicleDataError {
 
 
 async fn resolve_vin( state: &Arc<AppState>, access_token: &str ) -> Result<String, String> {
-	{
-		let cached = state.vin.lock().unwrap().clone();
-		if let Some( vin ) = cached {
-			return Ok( vin );
-		}
-	}
-
 	let url = format!( "{}/api/1/vehicles", state.fleet_api_base );
 	let body: Value = state.http_client
 		.get( &url )
@@ -114,8 +105,29 @@ async fn resolve_vin( state: &Arc<AppState>, access_token: &str ) -> Result<Stri
 		.ok_or_else( || "VIN not found in vehicles response".to_string() )?
 		.to_string();
 
-	*state.vin.lock().unwrap() = Some( vin.clone() );
 	return Ok( vin )
+}
+
+
+async fn fleet_status_paired( state: &Arc<AppState>, access_token: &str, vin: &str ) -> Result<bool, String> {
+	let url = format!( "{}/api/1/vehicles/fleet_status", state.fleet_api_base );
+	let body: Value = state.http_client
+		.post( &url )
+		.bearer_auth( access_token )
+		.json( &json!( { "vins": [ vin ] } ) )
+		.send()
+		.await
+		.map_err( |e| format!( "fleet_status request failed: {}", e ) )?
+		.json()
+		.await
+		.map_err( |e| format!( "fleet_status parse error: {}", e ) )?;
+
+	let paired = body[ "response" ][ "key_paired_vins" ]
+		.as_array()
+		.map( |a| a.iter().any( |v| v.as_str() == Some( vin ) ) )
+		.unwrap_or( false );
+
+	return Ok( paired )
 }
 
 
@@ -225,8 +237,17 @@ async fn fetch_vehicle_data( state: &Arc<AppState>, access_token: &str ) -> Resu
 
 
 
-pub async fn pairing_status( State( state ): State<Arc<AppState>> ) -> Json<Value> {
-	let paired = state.key_paired.load( Ordering::Relaxed );
+pub async fn pairing_status( State( state ): State<Arc<AppState>>, CurrentUser( user_id ): CurrentUser ) -> Json<Value> {
+	let Some( access_token ) = get_valid_access_token( &state, user_id ).await else {
+		return Json( json!( { "status": "unpaired", "error": "not_authenticated" } ) );
+	};
+
+	let vin = match resolve_vin( &state, &access_token ).await {
+		Ok( v ) => v,
+		Err( _ ) => return Json( json!( { "status": "unpaired" } ) ),
+	};
+
+	let paired = fleet_status_paired( &state, &access_token, &vin ).await.unwrap_or( false );
 	Json( json!( { "status": if paired { "paired" } else { "unpaired" } } ) )
 }
 
@@ -235,8 +256,8 @@ pub async fn pairing_status( State( state ): State<Arc<AppState>> ) -> Json<Valu
 
 
 
-pub async fn wake( State( state ): State<Arc<AppState>> ) -> Json<Value> {
-	let Some( access_token ) = get_valid_access_token( &state ).await else {
+pub async fn wake( State( state ): State<Arc<AppState>>, CurrentUser( user_id ): CurrentUser ) -> Json<Value> {
+	let Some( access_token ) = get_valid_access_token( &state, user_id ).await else {
 		return Json( json!( { "ok": false, "error": "not_authenticated" } ) );
 	};
 
@@ -256,8 +277,8 @@ pub async fn wake( State( state ): State<Arc<AppState>> ) -> Json<Value> {
 }
 
 
-pub async fn vehicle_online( State( state ): State<Arc<AppState>> ) -> Json<Value> {
-	let Some( access_token ) = get_valid_access_token( &state ).await else {
+pub async fn vehicle_online( State( state ): State<Arc<AppState>>, CurrentUser( user_id ): CurrentUser ) -> Json<Value> {
+	let Some( access_token ) = get_valid_access_token( &state, user_id ).await else {
 		return Json( json!( { "error": "not_authenticated" } ) );
 	};
 
@@ -286,8 +307,8 @@ pub async fn vehicle_online( State( state ): State<Arc<AppState>> ) -> Json<Valu
 }
 
 
-pub async fn pairing_confirm( State( state ): State<Arc<AppState>> ) -> Json<Value> {
-	let Some( access_token ) = get_valid_access_token( &state ).await else {
+pub async fn pairing_confirm( State( state ): State<Arc<AppState>>, CurrentUser( user_id ): CurrentUser ) -> Json<Value> {
+	let Some( access_token ) = get_valid_access_token( &state, user_id ).await else {
 		return Json( json!( { "verified": false, "error": "not_authenticated" } ) );
 	};
 
@@ -319,29 +340,26 @@ pub async fn pairing_confirm( State( state ): State<Arc<AppState>> ) -> Json<Val
 		} ) );
 	}
 
-
-
-	match fetch_vehicle_data( &state, &access_token ).await {
-		Ok( vehicle ) => {
-			state.key_paired.store( true, Ordering::Relaxed );
-			let _ = std::fs::write( ".paired", "" );
-			Json( json!( { "verified": true, "vehicle": vehicle } ) )
-		},
-		Err( e ) => {
-			e.log( "pairing_confirm" );
-			Json( json!( {
-				"verified": false,
-				"error": e.public_msg(),
-				"message": "Car came online but vehicle data fetch failed. Check that the virtual key was approved in the Tesla app."
-			} ) )
-		}
+	// Ask Tesla whether the virtual key is actually paired (authoritative).
+	match fleet_status_paired( &state, &access_token, &vin ).await {
+		Ok( true )  => Json( json!( { "verified": true } ) ),
+		Ok( false ) => Json( json!( {
+			"verified": false,
+			"error": "key_not_paired",
+			"message": "Car is online but the virtual key isn't paired yet. Approve it in the Tesla app, then try again."
+		} ) ),
+		Err( e ) => Json( json!( {
+			"verified": false,
+			"error": "fleet_status_failed",
+			"message": e
+		} ) ),
 	}
 }
 
 
 
-pub async fn trunk( State( state ): State<Arc<AppState>> ) -> Json<Value> {
-	let Some( access_token ) = get_valid_access_token( &state ).await else {
+pub async fn trunk( State( state ): State<Arc<AppState>>, CurrentUser( user_id ): CurrentUser ) -> Json<Value> {
+	let Some( access_token ) = get_valid_access_token( &state, user_id ).await else {
 		return Json( json!( { "error": "not_authenticated" } ) );
 	};
 
@@ -365,8 +383,8 @@ pub async fn trunk( State( state ): State<Arc<AppState>> ) -> Json<Value> {
 	}
 }
 
-pub async fn charge_port( State( state ): State<Arc<AppState>> ) -> Json<Value> {
-	let Some( access_token ) = get_valid_access_token( &state ).await else {
+pub async fn charge_port( State( state ): State<Arc<AppState>>, CurrentUser( user_id ): CurrentUser ) -> Json<Value> {
+	let Some( access_token ) = get_valid_access_token( &state, user_id ).await else {
 		return Json( json!(
 			{
 				"error": "not authenticated"
@@ -383,47 +401,41 @@ pub async fn charge_port( State( state ): State<Arc<AppState>> ) -> Json<Value> 
 		) )
 	};
 
-	let mut port_state = state.is_charge_port_open.lock().await;
+	// Read the current door state so we know whether to open or close it.
+	let vehicle = match fetch_vehicle_data( &state, &access_token ).await {
+		Ok( v ) => v,
+		Err( e ) => {
+			e.log( "charge_port" );
+			return Json( json!( { "ok": false, "error": e.public_msg() } ) );
+		}
+	};
+	let currently_open = vehicle[ "chargePortDoor" ].as_bool().unwrap_or( false );
 
-	if port_state.is_none() {
-		// let vehicle = fetch_vehicle_data( &state, &access_token );
-		// let open = vehicle[ "chargePortDoor" ].as_bool().unwrap_or( false );
-		let vehicle = match fetch_vehicle_data( &state, &access_token ).await {
-			Ok( v ) => v,
-			Err( e ) => {
-				e.log( "charge_port" );
-				return Json( json!( { "ok": false, "error": e.public_msg() } ) );
-			}
-		};
-
-		let open = vehicle[ "chargePortDoor" ].as_bool().unwrap_or( false );
-		*port_state = Some( open );
-	}
-
-	let currently_open = port_state.unwrap();
-
-	let VCSEC_msg = if currently_open {
-		car_server::Action { action_msg: Some( ActionMsg::VehicleAction( VehicleAction { vehicle_action_msg: Some( VehicleActionMsg::ChargePortDoorClose( ChargePortDoorClose {} ) ) }) ) };
+	let vcsec_msg = if currently_open {
+		car_server::Action {
+			action_msg: Some( ActionMsg::VehicleAction( VehicleAction {
+				vehicle_action_msg: Some( VehicleActionMsg::ChargePortDoorClose( ChargePortDoorClose {} ) )
+			} ) )
+		}
 	} else {
-  		car_server::Action { action_msg: Some( ActionMsg::VehicleAction( VehicleAction { vehicle_action_msg: Some( VehicleActionMsg::ChargePortDoorOpen( ChargePortDoorOpen {} ) ) }) ) };
+		car_server::Action {
+			action_msg: Some( ActionMsg::VehicleAction( VehicleAction {
+				vehicle_action_msg: Some( VehicleActionMsg::ChargePortDoorOpen( ChargePortDoorOpen {} ) )
+			} ) )
+		}
 	};
 
+	let plaintext = vcsec_msg.encode_to_vec();
 
-	// let VCSEC_msg = car_server::Action {
-	// 	action_msg: Some( ActionMsg::VehicleAction( VehicleAction { vehicle_action_msg: Some( VehicleActionMsg::ChargePortDoorOpen( ChargePortDoorOpen {} ) ) }) )
-	// };
-
-	let plaintext = VCSEC_msg.encode_to_vec();
-
-	match send_signed_command(&state, &access_token, &vin, DOMAIN_INFOTAINMENT, plaintext).await{
+	match send_signed_command( &state, &access_token, &vin, DOMAIN_INFOTAINMENT, plaintext ).await {
 		Ok( () ) => Json( json!( { "ok": true } ) ),
-		Err( E ) => Json( json!( { "ok": false, "error": E } ) )
+		Err( e ) => Json( json!( { "ok": false, "error": e } ) )
 	}
 }
 
 
-pub async fn charge_port_latch( State( state ): State<Arc<AppState>> ) -> Json<Value> {
-	let Some( access_token ) = get_valid_access_token(&state).await else {
+pub async fn charge_port_latch( State( state ): State<Arc<AppState>>, CurrentUser( user_id ): CurrentUser ) -> Json<Value> {
+	let Some( access_token ) = get_valid_access_token( &state, user_id ).await else {
 		return Json( json!(
 			{
 				"error": "not authenticated"
@@ -456,8 +468,8 @@ pub async fn charge_port_latch( State( state ): State<Arc<AppState>> ) -> Json<V
 }
 
 
-pub async fn flash( State( state ): State<Arc<AppState>> ) -> Json<Value> {
-	let Some( access_token ) = get_valid_access_token(&state).await else {
+pub async fn flash( State( state ): State<Arc<AppState>>, CurrentUser( user_id ): CurrentUser ) -> Json<Value> {
+	let Some( access_token ) = get_valid_access_token( &state, user_id ).await else {
 		return Json( json!(
 			{
 				"error": "not authenticated"
@@ -504,8 +516,8 @@ pub async fn flash( State( state ): State<Arc<AppState>> ) -> Json<Value> {
 }
 
 
-pub async fn vehicle_state( State( state ): State<Arc<AppState>> ) -> Json<Value> {
-	let Some( access_token ) = get_valid_access_token( &state ).await else {
+pub async fn vehicle_state( State( state ): State<Arc<AppState>>, CurrentUser( user_id ): CurrentUser ) -> Json<Value> {
+	let Some( access_token ) = get_valid_access_token( &state, user_id ).await else {
 		return Json( json!( { "error": "not_authenticated" } ) );
 	};
 
@@ -520,8 +532,8 @@ pub async fn vehicle_state( State( state ): State<Arc<AppState>> ) -> Json<Value
 }
 
 
-pub async fn charging_history( State( state ): State<Arc<AppState>> ) -> Json<Value> {
-	let Some( access_token ) = get_valid_access_token( &state ).await else {
+pub async fn charging_history( State( state ): State<Arc<AppState>>, CurrentUser( user_id ): CurrentUser ) -> Json<Value> {
+	let Some( access_token ) = get_valid_access_token( &state, user_id ).await else {
 		return Json( json!( { "error": "not_authenticated" } ) );
 	};
 

@@ -2,7 +2,14 @@ use axum::{
 	Json,
 	extract::{
 		Query,
-		State
+		State,
+		FromRequestParts
+	},
+	http::{
+		StatusCode,
+		request::{
+			Parts
+		}
 	},
 	response::{
 		Redirect
@@ -23,7 +30,14 @@ use std::{
 use crate::{
 	AppState,
 	db::{
-		get_access_token
+		get_access_token,
+		get_session,
+		store_pkce_state,
+		store_session,
+		store_tokens,
+		delete_session,
+		delete_tokens,
+		upsert_user
 	}
 };
 
@@ -33,11 +47,61 @@ use sqlx::{
 	}
 };
 
+use tower_cookies::{
+	Cookies,
+	Cookie,
+	cookie::{
+		SameSite
+	}
+};
+
+pub fn sha256_hex( input: &str ) -> String {
+	use sha2::{ Digest, Sha256 };
+	Sha256::digest( input.as_bytes() )
+		.iter()
+		.map( | b | format!( "{:02x}", b ) )
+		.collect()
+}
+
+
+pub struct CurrentUser( pub i64 );
+
+
+impl FromRequestParts<Arc<AppState>> for CurrentUser {
+	type Rejection = ( StatusCode, Json<serde_json::Value> );
+
+	async fn from_request_parts( parts: &mut Parts, state: &Arc<AppState> ) -> Result<Self, Self::Rejection> {
+		let unauthorized = || (
+			StatusCode::UNAUTHORIZED,
+			Json( serde_json::json!( { "error": "not_authenticated" } ) )
+		);
+
+		let cookies = Cookies::from_request_parts( parts, state ).await
+			.map_err( | _ | unauthorized() )?;
+
+		let raw = cookies.get( "session" )
+			.map( | c | c.value().to_string() )
+			.ok_or_else( unauthorized )?;
+
+		let user_id = get_session( &state.database, &sha256_hex( &raw ) ).await
+			.ok_or_else( unauthorized )?;
+
+		Ok( CurrentUser( user_id ) )
+	}
+}
+
 #[derive( Debug, Serialize, Deserialize, Clone, FromRow )]
 pub struct TokenData {
 	pub access_token: String,
 	pub refresh_token: String,
 	pub expires_at: i64
+}
+
+#[derive( Debug, Serialize, Deserialize, Clone, FromRow )]
+pub struct PkceData {
+	pub state: String,
+	pub verifier: String,
+	pub created_at: i64
 }
 
 #[derive( Deserialize )]
@@ -46,6 +110,15 @@ pub struct CallbackParams {
 	state: String
 }
 
+#[derive( Debug, Serialize, Deserialize, Clone, FromRow )]
+pub struct SessionData {
+	id: String,
+	user_id: i64,
+	created_at: i64,
+	expires_at: i64
+}
+
+
 #[derive( Deserialize )]
 struct TokenResponse {
 	access_token: String,
@@ -53,28 +126,14 @@ struct TokenResponse {
 	expires_in: i64
 }
 
-pub async fn get_valid_access_token( state: &Arc<AppState> ) -> Option<String> {
+pub async fn get_valid_access_token( state: &Arc<AppState>, user_id: i64 ) -> Option<String> {
 	let now = chrono::Utc::now().timestamp();
 
-	{
-		let token: TokenData = match get_access_token( &state.database, user_id ).await {
-			Some( tokendata ) => tokendata,
-			None => { println!( "No token found for user." ); }
-		}
+	let token = get_access_token( &state.database, user_id ).await?;
 
-		if let Some( t ) = token.as_ref() {
-			if now < t.expires_at - 60 {
-				return Some( t.access_token.clone() );
-			}
-		} else {
-			return None;
-		}
+	if now < token.expires_at - 60 {
+		return Some( token.access_token );
 	}
-
-	let refresh_token = {
-		let token = state.token.lock().unwrap();
-		token.as_ref().map( | t | t.refresh_token.clone() )?
-	};
 
 	println!( "Access token expired, refreshing..." );
 
@@ -82,7 +141,7 @@ pub async fn get_valid_access_token( state: &Arc<AppState> ) -> Option<String> {
 		( "grant_type", "refresh_token" ),
 		( "client_id", state.client_id.as_str() ),
 		( "client_secret", state.client_secret.as_str() ),
-		( "refresh_token", refresh_token.as_str() ),
+		( "refresh_token", token.refresh_token.as_str() ),
 	] ).ok()?;
 
 	let response = state.http_client
@@ -95,23 +154,16 @@ pub async fn get_valid_access_token( state: &Arc<AppState> ) -> Option<String> {
 
 	if !response.status().is_success() {
 		eprintln!( "Token refresh failed: {}", response.status() );
-		// Clear the invalid token so the frontend knows to re-authenticate
-		let mut token = state.token.lock().unwrap();
-		*token = None;
 		return None;
 	}
 
 	let token_response = response.json::<TokenResponse>().await.ok()?;
 	let new_access_token = token_response.access_token.clone();
-	let expires_at = chrono::Utc::now().timestamp() + token_response.expires_in;
+	let new_expires_at = now + token_response.expires_in;
+	let new_refresh = token_response.refresh_token.unwrap_or( token.refresh_token );
 
-	{
-		let mut token = state.token.lock().unwrap();
-		*token = Some( TokenData {
-			access_token: token_response.access_token,
-			refresh_token: token_response.refresh_token.unwrap_or( refresh_token ),
-			expires_at,
-		} );
+	if let Err( e ) = store_tokens( &state.database, user_id, &new_access_token, &new_refresh, new_expires_at ).await {
+		eprintln!( "Failed to persist refreshed token: {}", e );
 	}
 
 	println!( "Token refreshed successfully" );
@@ -121,10 +173,7 @@ pub async fn get_valid_access_token( state: &Arc<AppState> ) -> Option<String> {
 pub async fn get_auth_url( State( state ): State<Arc<AppState>> ) -> Json<serde_json::Value> {
 	let oauth_state = uuid::Uuid::new_v4().to_string();
 
-	{
-		let mut pkce = state.pending_pkce.lock().unwrap();
-		*pkce = Some( ( oauth_state.clone(), String::new() ) );
-	}
+	store_pkce_state( &state.database, oauth_state.clone(), String::new() ).await;
 
 	let mut url = reqwest::Url::parse( "https://fleet-auth.prd.vn.cloud.tesla.com/oauth2/v3/authorize" ).unwrap();
 	url.query_pairs_mut()
@@ -137,26 +186,13 @@ pub async fn get_auth_url( State( state ): State<Arc<AppState>> ) -> Json<serde_
 	Json( serde_json::json!( { "url": url.to_string() } ) )
 }
 
+
+
 pub async fn callback(
 	State( app_state ): State<Arc<AppState>>,
+	cookies: Cookies,
 	Query( params ): Query<CallbackParams>,
 ) -> Redirect {
-	let code_verifier = {
-		let mut pkce = app_state.pending_pkce.lock().unwrap();
-
-		match pkce.as_ref() {
-			Some( ( stored_state, _ ) ) if stored_state == &params.state => {
-				pkce.take().map( | ( _, v ) | v )
-			}
-			_ => None,
-		}
-	};
-
-	let Some( _code_verifier ) = code_verifier else {
-		eprintln!( "OAuth callback: invalid or missing state" );
-		return Redirect::to( &format!( "{}/?error=invalid_state", app_state.frontend_url ) );
-	};
-
 	let form_body = serde_urlencoded::to_string( &[
 		( "grant_type", "authorization_code" ),
 		( "client_id", app_state.client_id.as_str() ),
@@ -196,59 +232,145 @@ pub async fn callback(
 	};
 
 	let expires_at = chrono::Utc::now().timestamp() + token_response.expires_in;
+	let access_token = token_response.access_token;
+	let refresh_token = token_response.refresh_token.unwrap_or_default();
 
-	{
-		let mut token = app_state.token.lock().unwrap();
-		*token = Some( TokenData {
-			access_token: token_response.access_token,
-			refresh_token: token_response.refresh_token.unwrap_or_default(),
-			expires_at,
-		} );
+	let identity = match app_state.http_client
+		.get( format!( "{}/api/1/users/me", app_state.fleet_api_base ) )
+		.bearer_auth( &access_token )
+		.send()
+		.await {
+			Ok( res ) if res.status().is_success() => res.json::<serde_json::Value>().await.unwrap_or_default(),
+			Ok( res ) => {
+				eprintln!( "users/me returned {}", res.status() );
+				return Redirect::to( &format!( "{}/?error=identity_failed", app_state.frontend_url ) );
+			}
+			Err( e ) => {
+				eprintln!( "users/me request failed: {}", e );
+				return Redirect::to( &format!( "{}/?error=identity_failed", app_state.frontend_url ) );
+			}
+		};
+
+	let account_id = identity[ "response" ][ "vault_uuid" ].as_str().unwrap_or_default().to_string();
+	let email      = identity[ "response" ][ "email" ].as_str();
+
+	if account_id.is_empty() {
+		eprintln!( "failed to resolve account ID" );
+		return Redirect::to( &format!( "{}/?error=identity_failed", app_state.frontend_url ) );
 	}
 
-	println!( "Successfully authenticated with Tesla!" );
+	let user_id = upsert_user(
+		&app_state.database,
+		&account_id,
+		email
+	).await;
+
+	// let store_success = store_tokens(
+	// 	&app_state.database,
+	// 	user_id,
+	// 	&access_token,
+	// 	&refresh_token,
+	// 	expires_at
+	// ).await;
+
+	if let Err( e ) = store_tokens(
+		&app_state.database,
+		user_id,
+		&access_token,
+		&refresh_token,
+		expires_at
+	).await {
+		eprintln!( "Failed to store tokens: {}", e );
+		return Redirect::to( &format!( "{}/?error=store_failed", app_state.frontend_url ) );
+	}
+
+	let raw_session = uuid::Uuid::new_v4().simple().to_string()
+		+ &uuid::Uuid::new_v4().simple().to_string();
+	let session_expires_at = chrono::Utc::now().timestamp() + 60 * 60 * 24 * 30; // 30 days
+
+	if let Err( e ) = store_session(
+		&app_state.database,
+		&sha256_hex( &raw_session ),
+		user_id,
+		session_expires_at
+	).await {
+		eprintln!( "Failed to store session: {}", e );
+		return Redirect::to( &format!( "{}/?error=session_failed", app_state.frontend_url ) );
+	}
+
+	let secure = std::env::var( "COOKIE_SECURE" ).as_deref() == Ok( "true" );
+	let mut session_cookie = Cookie::new( "session", raw_session );
+
+	session_cookie.set_http_only( true );
+	session_cookie.set_path( "/" );
+	session_cookie.set_same_site( SameSite::Lax );
+	session_cookie.set_secure( secure );
+	session_cookie.set_max_age( tower_cookies::cookie::time::Duration::days( 30 ) );
+	cookies.add( session_cookie );
+
+	println!( "Successfully authenticated Tesla account {}", account_id );
 	Redirect::to( &app_state.frontend_url )
 }
 
-pub async fn logout( State( state ): State<Arc<AppState>> ) -> Json<serde_json::Value> {
-	let token_data = {
-		let mut token = state.token.lock().unwrap();
-		token.take()
-	};
 
-	let Some( token_data ) = token_data else {
+pub async fn logout( State( state ): State<Arc<AppState>>, cookies: Cookies ) -> Json<serde_json::Value> {
+	let Some( raw ) = cookies.get( "session" ).map( | c | c.value().to_string() ) else {
+		return Json( serde_json::json!( { "message": "not logged in" } ) );
+	};
+	let hash = sha256_hex( &raw );
+
+	let Some( user_id ) = get_session( &state.database, &hash ).await else {
 		return Json( serde_json::json!( { "message": "not logged in" } ) );
 	};
 
-	for token in [ &token_data.access_token, &token_data.refresh_token ] {
-		if token.is_empty() { continue; }
 
-		let form_body = serde_urlencoded::to_string( &[
-			( "token", token.as_str() ),
-			( "client_id", state.client_id.as_str() ),
-			( "client_secret", state.client_secret.as_str() ),
-		] ).unwrap_or_default();
+	if let Some( token_data ) = get_access_token( &state.database, user_id ).await {
+		for token in [ &token_data.access_token, &token_data.refresh_token ] {
+			if token.is_empty() { continue; }
 
-		if let Err( e ) = state.http_client
-			.post( "https://fleet-auth.prd.vn.cloud.tesla.com/oauth2/v3/revoke" )
-			.header( "Content-Type", "application/x-www-form-urlencoded" )
-			.body( form_body )
-			.send()
-			.await
-		{
-			eprintln!( "Token revocation request failed: {}", e );
+			let form_body = serde_urlencoded::to_string( &[
+				( "token", token.as_str() ),
+				( "client_id", state.client_id.as_str() ),
+				( "client_secret", state.client_secret.as_str() ),
+			] ).unwrap_or_default();
+
+			if let Err( e ) = state.http_client
+				.post( "https://fleet-auth.prd.vn.cloud.tesla.com/oauth2/v3/revoke" )
+				.header( "Content-Type", "application/x-www-form-urlencoded" )
+				.body( form_body )
+				.send()
+				.await
+			{
+				eprintln!( "Token revocation request failed: {}", e );
+			}
 		}
 	}
+
+	let _ = delete_session( &state.database, &hash ).await;
+	let _ = delete_tokens( &state.database, user_id ).await;
+
+	let mut removal = Cookie::new( "session", "" );
+	removal.set_path( "/" );
+	cookies.remove( removal );
 
 	Json( serde_json::json!( { "message": "logged out" } ) )
 }
 
-pub async fn status( State( state ): State<Arc<AppState>> ) -> Json<serde_json::Value> {
-	let token = state.token.lock().unwrap();
-	let authenticated = token.is_some();
-	let expires_at = token.as_ref().map( | t | t.expires_at );
-	Json( serde_json::json!( {
-		"authenticated": authenticated,
-		"expires_at": expires_at,
-	} ) )
+pub async fn status( State( state ): State<Arc<AppState>>, cookies: Cookies ) -> Json<serde_json::Value> {
+	let user_id = match cookies.get( "session" ) {
+		Some( c ) => get_session( &state.database, &sha256_hex( c.value() ) ).await,
+		None      => None,
+	};
+
+	let Some( user_id ) = user_id else {
+		return Json( serde_json::json!( { "authenticated": false, "expires_at": serde_json::Value::Null } ) );
+	};
+
+	match get_access_token( &state.database, user_id ).await {
+		Some( token ) => Json( serde_json::json!( {
+			"authenticated": true,
+			"expires_at": token.expires_at,
+		} ) ),
+		None => Json( serde_json::json!( { "authenticated": false, "expires_at": serde_json::Value::Null } ) ),
+	}
 }

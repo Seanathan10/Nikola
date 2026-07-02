@@ -60,6 +60,10 @@ use tower_http::{
 	}
 };
 
+use tower_cookies::{
+	CookieManagerLayer
+};
+
 use std::{
 	collections::{
 		HashMap
@@ -206,7 +210,8 @@ async fn main() {
 	let cors_config = CorsLayer::new()
 		.allow_methods( [ Method::GET, Method::POST ] )
 		.allow_origin( frontend_url.parse::<HeaderValue>().unwrap() )
-		.allow_headers( [ header::CONTENT_TYPE ] );
+		.allow_headers( [ header::CONTENT_TYPE ] )
+		.allow_credentials( true );
 
 	let app = Router::new()
 		.route( "/.well-known/appspecific/com.tesla.3p.public-key.pem", get( public_key ) )
@@ -229,6 +234,7 @@ async fn main() {
 		.route( "/api/charge_port_latch",   post( tesla::charge_port_latch ) )
 
 		.layer( cors_config )
+		.layer( CookieManagerLayer::new() )
 		.with_state( state );
 
 	let listener = TcpListener::bind( "0.0.0.0:3001" ).await.unwrap();

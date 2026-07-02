@@ -224,7 +224,7 @@ pub async fn fetch_session_info(
 		          domain, info.counter, info.clock_time, info.public_key.len()
 	);
 
-	state.sessions.lock().unwrap().insert( domain, CachedSession {
+	state.sessions.lock().unwrap().insert( ( vin.to_string(), domain ), CachedSession {
 		epoch: info.epoch,
 		counter: info.counter,
 		clock_time: info.clock_time,
@@ -305,7 +305,7 @@ pub async fn send_signed_command(
 	plaintext: Vec<u8>,
 ) -> Result<(), String> {
 	{
-		let has_session = state.sessions.lock().unwrap().contains_key( &domain );
+		let has_session = state.sessions.lock().unwrap().contains_key( &( vin.to_string(), domain ) );
 		if !has_session {
 			fetch_session_info( state, access_token, vin, domain ).await?;
 		}
@@ -353,7 +353,7 @@ async fn try_send(
 	let (epoch, counter, expires_at, vehicle_pub_key) = {
 		let mut sessions = state.sessions.lock().map_err( |e| format!( "failed to lock sessions: {e}" ) )?;
 
-		let session = sessions.get_mut( &domain ).ok_or_else( || format!( "no session for domain {}", domain ) )?;
+		let session = sessions.get_mut( &( vin.to_string(), domain ) ).ok_or_else( || format!( "no session for domain {}", domain ) )?;
 
 		//                     4294967295
 		if session.counter == 0xFFFF_FFFF {
