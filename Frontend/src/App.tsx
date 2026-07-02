@@ -64,6 +64,26 @@ export default function App() {
 		}
 	};
 
+
+	const handleDevLogin = async () => {
+		try {
+			const res = await fetch( `${ API }/api/dev/login`, { method: "POST", credentials: "include" } );
+			const data = await res.json();
+			if ( !res.ok ) {
+				setError( "Dev login failed: " + ( data.message ?? data.error ?? res.status ) );
+				return;
+			}
+			if ( data.has_tesla_tokens === false ) {
+				setError( "Dev login succeeded, but this user has no Tesla tokens — do a real login once (via tunnel) for live vehicle data." );
+			}
+			const status = await fetch( `${ API }/api/auth/status`, { credentials: "include" } ).then( r => r.json() );
+			setAuthStatus( status );
+			if ( status.authenticated ) checkPairing();
+		} catch ( e ) {
+			setError( "Dev login failed: " + e );
+		}
+	};
+
 	const handleLogout = async () => {
 		try {
 			await fetch( `${ API }/api/auth/logout`, { credentials: "include" } );
@@ -83,6 +103,11 @@ export default function App() {
 				<h1>Nikola</h1>
 				<p>Not authenticated.</p>
 				<button onClick={ handleLogin }>Login with Tesla</button>
+				{ import.meta.env.DEV && (
+					<button onClick={ handleDevLogin } style={{ marginLeft: 8 }}>
+						Dev login (no Tesla)
+					</button>
+				) }
 			</div>
 		);
 	}

@@ -11,4 +11,11 @@ export default defineConfig({
 		babel({ presets: [reactCompilerPreset()] }),
 		cloudflare(),
 	],
+
+	server: {
+		proxy: {
+			"/api": { target: "http://localhost:3001", changeOrigin: true },
+			"/.well-known": { target: "http://localhost:3001", changeOrigin: true },
+		},
+	},
 });

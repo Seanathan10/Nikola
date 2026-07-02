@@ -108,6 +108,18 @@ pub async fn get_access_token(
 
 
 
+
+#[cfg( debug_assertions )]
+pub async fn get_latest_user_id(
+	pool: &SqlitePool
+) -> Option<i64> {
+	query_scalar::<_, i64>( "SELECT id FROM users ORDER BY id DESC LIMIT 1" )
+		.fetch_optional( pool )
+		.await
+		.ok()
+		.flatten()
+}
+
 pub async fn store_session(
 	pool: &SqlitePool,
 	id: &str,

@@ -32,17 +32,24 @@ use axum::{
 	http::{
 		Method,
 		HeaderValue,
+		StatusCode,
 		header
 	},
 	routing::{
 		get,
 		post
 	},
+	middleware::{
+		from_fn_with_state,
+		Next
+	},
 	extract::{
-		State
+		State,
+		Request
 	},
 	response::{
-		Response
+		Response,
+		IntoResponse
 	},
 	body::{
 		Body
@@ -101,6 +108,8 @@ pub struct AppState {
 	pub fleet_api_base: String,
 	pub frontend_url: String,
 
+	pub cookie_secure: bool,
+
 	pub database: SqlitePool,
 
 	pub signing_key: SigningKey,
@@ -114,9 +123,31 @@ async fn health_check( State( _state ): State<Arc<AppState>> ) -> Json<Value> {
 	return Json( json!( { "message": "app backend works" } ) )
 }
 
+
+async fn csrf_origin_guard(
+	State( state ): State<Arc<AppState>>,
+	request: Request,
+	next: Next,
+) -> Response {
+	if request.method() == Method::POST {
+		let allowed = state.frontend_url.trim_end_matches( '/' );
+
+		let origin_ok = request.headers()
+			.get( header::ORIGIN )
+			.and_then( | v | v.to_str().ok() )
+			.map( | o | o.trim_end_matches( '/' ) == allowed )
+			.unwrap_or( false );
+
+		if !origin_ok {
+			return ( StatusCode::FORBIDDEN, Json( json!( { "error": "bad_origin" } ) ) ).into_response();
+		}
+	}
+
+	next.run( request ).await
+}
+
 async fn public_key() -> Response<Body> {
-	let key = std::fs::read_to_string( "./Keys/public-key.pem" )
-		.unwrap_or_else( |_| std::fs::read_to_string( "CarKey/public-key.pem" ).unwrap_or_default() );
+	let key = read_to_string( "./Keys/public-key.pem" ).unwrap_or_default();
 
 	return Response::builder()
 		.header( header::CONTENT_TYPE, "application/x-pem-file" )
@@ -178,8 +209,34 @@ async fn main() {
 	let frontend_url = var( "FRONTEND_URL" )
 		.unwrap_or_else( |_| "http://localhost:5173".to_string() );
 
-	let private_key = read_to_string( "./Keys/private-key.pem" )
-			.expect( "private-key.pem not found in CarKey/" );
+	let cookie_secure = var( "COOKIE_SECURE" )
+		.map( | v | !matches!( v.trim().to_ascii_lowercase().as_str(), "false" | "0" | "no" ) )
+		.unwrap_or( true );
+
+	let dev_login_enabled =
+		matches!(
+			var( "DEV_LOGIN" )
+				.unwrap_or_default()
+				.trim()
+				.to_ascii_lowercase()
+				.as_str(),
+
+			"1"
+		);
+
+	let bind_addr = var( "BIND_ADDR" ).unwrap_or_else( |_| "127.0.0.1:3001".to_string() );
+
+	#[cfg( not( debug_assertions ) )]
+	{
+		if dev_login_enabled {
+			panic!( "dev login enabled in release. exiting." );
+		}
+		if !cookie_secure {
+			panic!( "cookie security disabled in release. exiting." );
+		}
+	}
+
+	let private_key = read_to_string( "./Keys/private-key.pem" ).expect( "private key not found" );
 
 	let private_key = private_key.replace( "\r\n", "\n" ).replace( "\r", "\n" );
 
@@ -198,6 +255,7 @@ async fn main() {
 		redirect_uri: redirect_uri,
 		fleet_api_base: fleet_api_base,
 		frontend_url: frontend_url.clone(),
+		cookie_secure: cookie_secure,
 		database: database,
 		signing_key: signing_key,
 		public_key_bytes: public_key_bytes,
@@ -205,15 +263,17 @@ async fn main() {
 		sessions: Mutex::new( HashMap::new() ),
 	} );
 
-	// The CORS allow-origin must EXACTLY match the browser Origin — no trailing slash, no path.
+
 	let cors_origin = frontend_url.trim_end_matches( '/' );
+
 	let cors_config = CorsLayer::new()
 		.allow_methods( [ Method::GET, Method::POST ] )
 		.allow_origin( cors_origin.parse::<HeaderValue>().unwrap() )
 		.allow_headers( [ header::CONTENT_TYPE ] )
 		.allow_credentials( true );
 
-	let app = Router::new()
+	#[allow( unused_mut )]
+	let mut app = Router::new()
 		.route( "/.well-known/appspecific/com.tesla.3p.public-key.pem", get( public_key ) )
 
 		.route( "/",                        get( health_check ) )
@@ -231,13 +291,23 @@ async fn main() {
 		.route( "/api/trunk",               post( tesla::trunk ) )
 		.route( "/api/flash",               post( tesla::flash ) )
 		.route( "/api/charge_port",         post( tesla::charge_port ) )
-		.route( "/api/charge_port_latch",   post( tesla::charge_port_latch ) )
+		.route( "/api/charge_port_latch",   post( tesla::charge_port_latch ) );
 
+
+	#[cfg( debug_assertions )]
+	{
+		if dev_login_enabled {
+			app = app.route( "/api/dev/login", post( auth::dev_login ) );
+		}
+	}
+
+	let app = app
+		.layer( from_fn_with_state( state.clone(), csrf_origin_guard ) )
 		.layer( cors_config )
 		.layer( CookieManagerLayer::new() )
 		.with_state( state );
 
-	let listener = TcpListener::bind( "0.0.0.0:3001" ).await.unwrap();
-	println!( "Server started on port 3001" );
+	let listener = TcpListener::bind( &bind_addr ).await.unwrap();
+	println!( "Server started on {}", bind_addr );
 	axum::serve( listener, app ).await.unwrap();
 }

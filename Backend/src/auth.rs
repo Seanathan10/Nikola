@@ -41,6 +41,13 @@ use crate::{
 	}
 };
 
+#[cfg( debug_assertions )]
+use crate::{
+	db::{
+		get_latest_user_id
+	}
+};
+
 use sqlx::{
 	prelude::{
 		FromRow
@@ -51,9 +58,17 @@ use tower_cookies::{
 	Cookies,
 	Cookie,
 	cookie::{
-		SameSite
+		SameSite,
+		time::{
+			Duration as CookieDuration
+		}
 	}
 };
+
+use chrono::{
+	Utc
+};
+
 
 pub fn sha256_hex( input: &str ) -> String {
 	use sha2::{ Digest, Sha256 };
@@ -61,6 +76,22 @@ pub fn sha256_hex( input: &str ) -> String {
 		.iter()
 		.map( | b | format!( "{:02x}", b ) )
 		.collect()
+}
+
+
+
+
+fn build_session_cookie( raw_session: String, secure: bool ) -> Cookie<'static> {
+	let mut cookie = Cookie::new( "session", raw_session );
+
+	cookie.set_http_only( true );
+	cookie.set_path( "/" );
+	cookie.set_max_age( CookieDuration::days( 30 ) );
+
+	cookie.set_same_site( SameSite::Lax );
+	cookie.set_secure( secure );
+
+	return cookie;
 }
 
 
@@ -137,7 +168,7 @@ struct TokenResponse {
 }
 
 pub async fn get_valid_access_token( state: &Arc<AppState>, user_id: i64 ) -> Option<String> {
-	let now = chrono::Utc::now().timestamp();
+	let now = Utc::now().timestamp();
 
 	let token = get_access_token( &state.database, user_id ).await?;
 
@@ -246,7 +277,7 @@ pub async fn callback(
 		token_response.scope, token_response.id_token.is_some()
 	);
 
-	let expires_at = chrono::Utc::now().timestamp() + token_response.expires_in;
+	let expires_at = Utc::now().timestamp() + token_response.expires_in;
 	let access_token = token_response.access_token;
 	let refresh_token = token_response.refresh_token.unwrap_or_default();
 
@@ -298,7 +329,7 @@ pub async fn callback(
 
 	let raw_session = uuid::Uuid::new_v4().simple().to_string()
 		+ &uuid::Uuid::new_v4().simple().to_string();
-	let session_expires_at = chrono::Utc::now().timestamp() + 60 * 60 * 24 * 30; // 30 days
+	let session_expires_at = Utc::now().timestamp() + 60 * 60 * 24 * 30; // 30 days
 
 	if let Err( e ) = store_session(
 		&app_state.database,
@@ -310,16 +341,7 @@ pub async fn callback(
 		return Redirect::to( &format!( "{}/?error=session_failed", app_state.frontend_url ) );
 	}
 
-	// Frontend (localhost) and API (cloudflare tunnel) are cross-site, so the cookie must be
-	// SameSite=None to be sent on cross-site fetch/XHR — and SameSite=None requires Secure (HTTPS).
-	let mut session_cookie = Cookie::new( "session", raw_session );
-
-	session_cookie.set_http_only( true );
-	session_cookie.set_path( "/" );
-	session_cookie.set_same_site( SameSite::None );
-	session_cookie.set_secure( true );
-	session_cookie.set_max_age( tower_cookies::cookie::time::Duration::days( 30 ) );
-	cookies.add( session_cookie );
+	cookies.add( build_session_cookie( raw_session, app_state.cookie_secure ) );
 
 	println!( "Successfully authenticated Tesla account {}", account_id );
 	Redirect::to( &app_state.frontend_url )
@@ -386,4 +408,65 @@ pub async fn status( State( state ): State<Arc<AppState>>, cookies: Cookies ) ->
 		} ) ),
 		None => Json( serde_json::json!( { "authenticated": false, "expires_at": serde_json::Value::Null } ) ),
 	}
+}
+
+
+#[cfg( debug_assertions )]
+#[derive( Deserialize )]
+pub struct DevLoginParams {
+	user_id: Option<i64>,
+}
+
+#[cfg( debug_assertions )]
+pub async fn dev_login(
+	State( state ): State<Arc<AppState>>,
+	cookies: Cookies,
+	Query( params ): Query<DevLoginParams>,
+) -> ( StatusCode, Json<serde_json::Value> ) {
+	let user_id = match params.user_id {
+		Some( id ) => id,
+		None => match get_latest_user_id( &state.database ).await {
+			Some( id ) => id,
+			None => return (
+				StatusCode::BAD_REQUEST,
+				Json( serde_json::json!( {
+					"error": "no_users",
+					"message": "use tunnel to perform 1 real authentication to begin using the dev network"
+				} ) )
+			),
+		},
+	};
+
+	let raw_session = uuid::Uuid::new_v4().simple().to_string()
+		+ &uuid::Uuid::new_v4().simple().to_string();
+	let session_expires_at = Utc::now().timestamp() + 60 * 60 * 24 * 30; // 30 days
+
+	if let Err( e ) = store_session(
+		&state.database,
+		&sha256_hex( &raw_session ),
+		user_id,
+		session_expires_at
+	).await {
+		eprintln!( "[auth.rs] failed to store session: {}", e );
+		return (
+			StatusCode::INTERNAL_SERVER_ERROR,
+			Json( serde_json::json!( { "error": "session_failed" } ) )
+		);
+	}
+
+	cookies.add( build_session_cookie( raw_session, state.cookie_secure ) );
+
+
+	let tesla_tokens = get_access_token( &state.database, user_id ).await.is_some();
+
+	println!( "[auth.rs] loaded for user_id={} (tesla_tokens={})", user_id, tesla_tokens );
+
+	return (
+		StatusCode::OK,
+		Json( serde_json::json!( {
+			"authenticated": true,
+			"user_id": user_id,
+			"has_tesla_tokens": tesla_tokens,
+		} ) )
+	)
 }
