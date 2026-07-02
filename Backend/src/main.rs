@@ -205,9 +205,11 @@ async fn main() {
 		sessions: Mutex::new( HashMap::new() ),
 	} );
 
+	// The CORS allow-origin must EXACTLY match the browser Origin — no trailing slash, no path.
+	let cors_origin = frontend_url.trim_end_matches( '/' );
 	let cors_config = CorsLayer::new()
 		.allow_methods( [ Method::GET, Method::POST ] )
-		.allow_origin( frontend_url.parse::<HeaderValue>().unwrap() )
+		.allow_origin( cors_origin.parse::<HeaderValue>().unwrap() )
 		.allow_headers( [ header::CONTENT_TYPE ] )
 		.allow_credentials( true );
 
