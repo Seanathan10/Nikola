@@ -105,7 +105,7 @@ export default function Dashboard({
 	const fetchVehicleState = useCallback(async () => {
 		setVehicleLoading(true);
 		try {
-			const res = await fetch(`${API}/api/vehicle/state`);
+			const res = await fetch(`${API}/api/vehicle/state`, { credentials: "include" });
 			const data = await res.json();
 
 			if (data.status === "awake") {
@@ -175,6 +175,7 @@ export default function Dashboard({
 		try {
 			const res = await fetch(`${API}/api/pairing/confirm`, {
 				method: "POST",
+				credentials: "include",
 			});
 			const data = await res.json();
 			if (data.verified) {
@@ -199,7 +200,7 @@ export default function Dashboard({
 	const fetchChargeHistory = async () => {
 		setHistoryLoading(true);
 		try {
-			const res = await fetch(`${API}/api/charging/history`);
+			const res = await fetch(`${API}/api/charging/history`, { credentials: "include" });
 			const data = await res.json();
 			setChargeHistory(data);
 		} catch (e) {
@@ -216,7 +217,7 @@ export default function Dashboard({
 		setIsWaking(true);
 		setWakeStatus("waking");
 		try {
-			const res = await fetch(`${API}/api/wake`, { method: "POST" });
+			const res = await fetch(`${API}/api/wake`, { method: "POST", credentials: "include" });
 			const data = await res.json();
 			if (!data.ok) {
 				setWakeStatus("unknown");
@@ -243,7 +244,7 @@ export default function Dashboard({
 			setWakeStatus(`waking — checking (${attempt}/${maxAttempts})`);
 
 			try {
-				const res = await fetch(`${API}/api/vehicle/online`);
+				const res = await fetch(`${API}/api/vehicle/online`, { credentials: "include" });
 				const data = await res.json();
 				if (data.online) {
 					setWakeStatus("online");
@@ -268,7 +269,7 @@ export default function Dashboard({
 
 	const handleTrunk = async () => {
 		try {
-			const res = await fetch(`${API}/api/trunk`, { method: "POST" });
+			const res = await fetch(`${API}/api/trunk`, { method: "POST", credentials: "include" });
 			const data = await res.json();
 			if (!data.ok)
 				setError(
@@ -281,7 +282,7 @@ export default function Dashboard({
 
 	const handleFlash = async () => {
 		try {
-			const res = await fetch(`${API}/api/flash`, { method: "POST" });
+			const res = await fetch(`${API}/api/flash`, { method: "POST", credentials: "include" });
 			const data = await res.json();
 
 			if (!data.ok) {
@@ -294,7 +295,7 @@ export default function Dashboard({
 
 	const handleCP = async () => {
 		try {
-			const res = await fetch(`${API}/api/cp`, { method: "POST" });
+			const res = await fetch(`${API}/api/cp`, { method: "POST", credentials: "include" });
 			const data = await res.json();
 
 			if (!data.ok) {
@@ -309,7 +310,7 @@ export default function Dashboard({
 
 	const handleCPLatch = async () => {
 		try {
-			const res = await fetch(`${API}/api/cplatch`, { method: "POST" });
+			const res = await fetch(`${API}/api/cplatch`, { method: "POST", credentials: "include" });
 			const data = await res.json();
 
 			if (!data.ok) {

@@ -24,7 +24,7 @@ export default function App() {
 	const checkPairing = useCallback(async () => {
         setPairingVerifying(true);
         try {
-            const res = await fetch(`${API}/api/pairing/status`);
+            const res = await fetch(`${API}/api/pairing/status`, { credentials: "include" });
             const data: PairingCheck = await res.json();
             setPairing(data);
         } catch (e: unknown) {
@@ -39,7 +39,7 @@ export default function App() {
     }, []);
 
 	useEffect( () => {
-		fetch( `${ API }/api/auth/status` )
+		fetch( `${ API }/api/auth/status`, { credentials: "include" } )
 			.then( res => res.json() )
 			.then( ( data: AuthStatus ) => {
 				setAuthStatus( data );
@@ -56,7 +56,7 @@ export default function App() {
 
 	const handleLogin = async () => {
 		try {
-			const res = await fetch( `${ API }/api/auth/url` );
+			const res = await fetch( `${ API }/api/auth/url`, { credentials: "include" } );
 			const data = await res.json();
 			window.location.href = data.url;
 		} catch ( e ) {
@@ -66,7 +66,7 @@ export default function App() {
 
 	const handleLogout = async () => {
 		try {
-			await fetch( `${ API }/api/auth/logout` );
+			await fetch( `${ API }/api/auth/logout`, { credentials: "include" } );
 			setAuthStatus( { authenticated: false, expires_at: null } );
 			setPairing( null );
 		} catch ( e ) {
