@@ -13,15 +13,9 @@ use sqlx::{
 	query_as,
 	query_scalar,
 	migrate,
-	Pool::{
-		self
-	},
-	Sqlite::{
-		self
-	},
-	SqlitePool::{
-		self
-	},
+	Pool,
+	Sqlite,
+	SqlitePool,
 	sqlite::{
 		SqliteConnectOptions,
 		SqlitePoolOptions,

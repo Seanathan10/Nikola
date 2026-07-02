@@ -81,9 +81,7 @@ use std::{
 };
 
 use sqlx::{
-	SqlitePool::{
-		self
-	}
+	SqlitePool
 };
 
 pub struct CachedSession {
