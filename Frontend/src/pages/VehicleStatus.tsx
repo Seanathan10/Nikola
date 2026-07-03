@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import type { VehicleState, PairingCheck } from "../types";
+import type { LightControls } from "./TeslaModel3";
 import "../css/VehicleStatus.css";
 
 const PAIRING_URL = "https://tesla.com/_ak/nikola.byseansingh.com";
@@ -15,13 +16,61 @@ type Props = {
 	onVerifyPairing: () => void;
 	onConfirmPairing: () => void;
 
-	lightControls: React.MutableRefObject<{
-		spot: { x: number; y: number; z: number; i: number };
-		point: { x: number; y: number; z: number; i: number };
-	}>;
+	lightControls: LightControls;
 };
 
 const DASH = "—";
+
+function LightSlider({
+	label,
+	min,
+	max,
+	step,
+	defaultValue,
+	onChange,
+}: {
+	label: string;
+	min: number;
+	max: number;
+	step: number;
+	defaultValue: number;
+	onChange: (value: number) => void;
+}) {
+	return (
+		<label className="slider-row">
+			<span>{label}</span>
+			<input
+				type="range"
+				min={min}
+				max={max}
+				step={step}
+				defaultValue={defaultValue}
+				onChange={(e) => onChange(Number(e.target.value))}
+			/>
+		</label>
+	);
+}
+
+function LightToggle({
+	label,
+	defaultChecked,
+	onChange,
+}: {
+	label: string;
+	defaultChecked: boolean;
+	onChange: (on: boolean) => void;
+}) {
+	return (
+		<label className="toggle-row">
+			<input
+				type="checkbox"
+				defaultChecked={defaultChecked}
+				onChange={(e) => onChange(e.target.checked)}
+			/>
+			<span>{label}</span>
+		</label>
+	);
+}
 
 function fmt(value: number | string | null | undefined, suffix = ""): string {
 	return value != null ? `${value}${suffix}` : `${DASH}${suffix}`;
@@ -178,86 +227,108 @@ export default function VehicleStatus({
 			)}
 
 			<div className="inputs">
-				<input
-					type="range"
-					min={-10}
-					max={10}
+				<LightToggle
+					label="Spot light"
+					defaultChecked={lightControls.current.spot.on}
+					onChange={(on) => (lightControls.current.spot.on = on)}
+				/>
+				<LightSlider
+					label="Spot X"
+					min={-20}
+					max={20}
 					step={0.1}
 					defaultValue={-4}
-					onChange={(e) =>
-						(lightControls.current.spot.x = Number(e.target.value))
-					}
+					onChange={(v) => (lightControls.current.spot.x = v)}
 				/>
-				<input
-					type="range"
+				<LightSlider
+					label="Spot Y"
 					min={0}
-					max={15}
+					max={20}
 					step={0.1}
 					defaultValue={6}
-					onChange={(e) =>
-						(lightControls.current.spot.y = Number(e.target.value))
-					}
+					onChange={(v) => (lightControls.current.spot.y = v)}
 				/>
-				<input
-					type="range"
-					min={-10}
-					max={10}
+				<LightSlider
+					label="Spot Z"
+					min={-20}
+					max={20}
 					step={0.1}
 					defaultValue={4}
-					onChange={(e) =>
-						(lightControls.current.spot.z = Number(e.target.value))
-					}
+					onChange={(v) => (lightControls.current.spot.z = v)}
+				/>
+				<LightSlider
+					label="Spot intensity"
+					min={0}
+					max={2000}
+					step={10}
+					defaultValue={600}
+					onChange={(v) => (lightControls.current.spot.i = v)}
 				/>
 
-				<input
-					type="range"
-					min={-10}
-					max={10}
+				<LightToggle
+					label="Point light"
+					defaultChecked={lightControls.current.point.on}
+					onChange={(on) => (lightControls.current.point.on = on)}
+				/>
+				<LightSlider
+					label="Point X"
+					min={-20}
+					max={20}
 					step={0.1}
 					defaultValue={4}
-					onChange={(e) =>
-						(lightControls.current.point.x = Number(e.target.value))
-					}
+					onChange={(v) => (lightControls.current.point.x = v)}
 				/>
-				<input
-					type="range"
+				<LightSlider
+					label="Point Y"
 					min={0}
-					max={10}
+					max={20}
 					step={0.1}
 					defaultValue={3}
-					onChange={(e) =>
-						(lightControls.current.point.y = Number(e.target.value))
-					}
+					onChange={(v) => (lightControls.current.point.y = v)}
 				/>
-				<input
-					type="range"
-					min={-10}
-					max={10}
+				<LightSlider
+					label="Point Z"
+					min={-20}
+					max={20}
 					step={0.1}
 					defaultValue={-3}
-					onChange={(e) =>
-						(lightControls.current.point.z = Number(e.target.value))
-					}
+					onChange={(v) => (lightControls.current.point.z = v)}
 				/>
-				<input
-					type="range"
-					min={-10}
-					max={10}
-					step={0.1}
-					defaultValue={-3}
-					onChange={(e) =>
-						(lightControls.current.spot.i = Number(e.target.value))
-					}
+				<LightSlider
+					label="Point intensity"
+					min={0}
+					max={1000}
+					step={0.5}
+					defaultValue={8}
+					onChange={(v) => (lightControls.current.point.i = v)}
 				/>
-				<input
-					type="range"
-					min={-10}
-					max={10}
-					step={0.1}
-					defaultValue={-3}
-					onChange={(e) =>
-						(lightControls.current.point.i = Number(e.target.value))
-					}
+
+				<LightToggle
+					label="Ambient light"
+					defaultChecked={lightControls.current.ambient.on}
+					onChange={(on) => (lightControls.current.ambient.on = on)}
+				/>
+				<LightSlider
+					label="Ambient intensity"
+					min={0}
+					max={20}
+					step={0.05}
+					defaultValue={0.4}
+					onChange={(v) => (lightControls.current.ambient.i = v)}
+				/>
+
+				<LightToggle
+					label="Environment (HDRI)"
+					defaultChecked={lightControls.current.env.on}
+					onChange={(on) => (lightControls.current.env.on = on)}
+				/>
+				<LightSlider
+					label="Env intensity"
+					min={0}
+					max={3}
+					step={0.05}
+					defaultValue={0.3}
+					onChange={(v) => (lightControls.current.env.i = v)}
 				/>
 			</div>
 		</section>

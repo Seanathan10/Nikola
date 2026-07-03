@@ -25,4 +25,29 @@
 
 .inputs {
 	display: grid;
+	gap: 6px;
+	max-height: 280px;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	margin-top: 12px;
+	padding: 4px 10px 8px 4px;
+	border: 1px solid;
+	border-radius: 6px;
+}
+
+.toggle-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: 8px;
+	font-size: 12px;
+	font-weight: 600;
+}
+
+.slider-row {
+	display: grid;
+	grid-template-columns: 120px 1fr;
+	align-items: center;
+	gap: 8px;
+	font-size: 12px;
 }

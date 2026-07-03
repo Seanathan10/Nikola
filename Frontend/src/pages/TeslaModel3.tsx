@@ -6,7 +6,7 @@ import { RepeatWrapping } from "three";
 
 import { CameraControls } from "@react-three/drei";
 import { Center } from "@react-three/drei";
-import { useFrame } from "@react-three/fiber";
+import { useFrame, useThree } from "@react-three/fiber";
 import { useRef } from "react";
 
 const MODEL_PATH = "/tesla-model-3-2024/source/2024_tesla_model_3.glb";
@@ -64,27 +64,42 @@ function TeslaModel() {
 	return <primitive object={scene} />;
 }
 
-function DramaticSpotlight({
+function SceneLights({
 	lightControls,
 }: {
 	lightControls: LightControls;
 }) {
 	const spotRef = useRef<THREE.SpotLight>(null);
 	const pointRef = useRef<THREE.PointLight>(null);
+	const ambientRef = useRef<THREE.AmbientLight>(null);
+	const scene = useThree((state) => state.scene);
 
 	useFrame(() => {
 		if (spotRef.current) {
-			const { x, y, z } = lightControls.current.spot;
+			const { x, y, z, i, on } = lightControls.current.spot;
 			spotRef.current.position.set(x, y, z);
+			spotRef.current.intensity = i;
+			spotRef.current.visible = on;
 		}
 		if (pointRef.current) {
-			const { x, y, z } = lightControls.current.point;
+			const { x, y, z, i, on } = lightControls.current.point;
 			pointRef.current.position.set(x, y, z);
+			pointRef.current.intensity = i;
+			pointRef.current.visible = on;
 		}
+		if (ambientRef.current) {
+			const { i, on } = lightControls.current.ambient;
+			ambientRef.current.intensity = i;
+			ambientRef.current.visible = on;
+		}
+
+		const env = lightControls.current.env;
+		scene.environmentIntensity = env.on ? env.i : 0;
 	});
 
 	return (
 		<>
+			<ambientLight ref={ambientRef} intensity={0.4} color="#ffffff" />
 			<SpotLight
 				ref={spotRef}
 				position={[-4, 6, 4]}
@@ -111,9 +126,11 @@ function DramaticSpotlight({
 
 useGLTF.preload(MODEL_PATH);
 
-type LightControls = React.MutableRefObject<{
-	spot: { x: number; y: number; z: number; i: number };
-	point: { x: number; y: number; z: number; i: number };
+export type LightControls = React.MutableRefObject<{
+	spot: { x: number; y: number; z: number; i: number; on: boolean };
+	point: { x: number; y: number; z: number; i: number; on: boolean };
+	ambient: { i: number; on: boolean };
+	env: { i: number; on: boolean };
 }>;
 
 export function Model_3({ lightControls }: { lightControls: LightControls }) {
@@ -130,14 +147,12 @@ export function Model_3({ lightControls }: { lightControls: LightControls }) {
 		>
 			<CameraControls></CameraControls>
 
-			<ambientLight intensity={0.4} color="#ffffff" />
-
 			<color attach="background" args={["#1a1a1a"]} />
 
 			<Environment preset="warehouse" environmentIntensity={0.3} />
 
 			<Suspense fallback={null}>
-				<DramaticSpotlight lightControls={lightControls}/>
+				<SceneLights lightControls={lightControls}/>
 				<Center disableY>
 					<TeslaModel />
 				</Center>
