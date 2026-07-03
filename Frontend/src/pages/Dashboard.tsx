@@ -25,7 +25,6 @@ type Props = {
 	onConfirmPairing: () => void;
 };
 
-
 export default function Dashboard({
 	onLogout,
 	pairing,
@@ -44,12 +43,17 @@ export default function Dashboard({
 	const [vehicleAsleep, setVehicleAsleep] = useState(false);
 	const [isWaking, setIsWaking] = useState(false);
 
-
+	const lightControls = useRef({
+		spot: { x: -4, y: 6, z: 4, i: 8 },
+		point: { x: 4, y: 3, z: -3, i: 8 },
+	});
 
 	const fetchVehicleState = useCallback(async () => {
 		setVehicleLoading(true);
 		try {
-			const res = await fetch(`${API}/api/vehicle/state`, { credentials: "include" });
+			const res = await fetch(`${API}/api/vehicle/state`, {
+				credentials: "include",
+			});
 			const data = await res.json();
 
 			if (data.status === "awake") {
@@ -153,7 +157,9 @@ export default function Dashboard({
 	const fetchChargeHistory = async () => {
 		setHistoryLoading(true);
 		try {
-			const res = await fetch(`${API}/api/charging/history`, { credentials: "include" });
+			const res = await fetch(`${API}/api/charging/history`, {
+				credentials: "include",
+			});
 			const data = await res.json();
 			setChargeHistory(data);
 		} catch (e) {
@@ -170,7 +176,10 @@ export default function Dashboard({
 		setIsWaking(true);
 		setWakeStatus("waking");
 		try {
-			const res = await fetch(`${API}/api/wake`, { method: "POST", credentials: "include" });
+			const res = await fetch(`${API}/api/wake`, {
+				method: "POST",
+				credentials: "include",
+			});
 			const data = await res.json();
 			if (!data.ok) {
 				setWakeStatus("unknown");
@@ -197,7 +206,9 @@ export default function Dashboard({
 			setWakeStatus(`waking — checking (${attempt}/${maxAttempts})`);
 
 			try {
-				const res = await fetch(`${API}/api/vehicle/online`, { credentials: "include" });
+				const res = await fetch(`${API}/api/vehicle/online`, {
+					credentials: "include",
+				});
 				const data = await res.json();
 				if (data.online) {
 					setWakeStatus("online");
@@ -222,7 +233,10 @@ export default function Dashboard({
 
 	const handleTrunk = async () => {
 		try {
-			const res = await fetch(`${API}/api/trunk`, { method: "POST", credentials: "include" });
+			const res = await fetch(`${API}/api/trunk`, {
+				method: "POST",
+				credentials: "include",
+			});
 			const data = await res.json();
 			if (!data.ok)
 				setError(
@@ -235,7 +249,10 @@ export default function Dashboard({
 
 	const handleFlash = async () => {
 		try {
-			const res = await fetch(`${API}/api/flash`, { method: "POST", credentials: "include" });
+			const res = await fetch(`${API}/api/flash`, {
+				method: "POST",
+				credentials: "include",
+			});
 			const data = await res.json();
 
 			if (!data.ok) {
@@ -248,7 +265,10 @@ export default function Dashboard({
 
 	const handleCP = async () => {
 		try {
-			const res = await fetch(`${API}/api/cp`, { method: "POST", credentials: "include" });
+			const res = await fetch(`${API}/api/cp`, {
+				method: "POST",
+				credentials: "include",
+			});
 			const data = await res.json();
 
 			if (!data.ok) {
@@ -263,7 +283,10 @@ export default function Dashboard({
 
 	const handleCPLatch = async () => {
 		try {
-			const res = await fetch(`${API}/api/cplatch`, { method: "POST", credentials: "include" });
+			const res = await fetch(`${API}/api/cplatch`, {
+				method: "POST",
+				credentials: "include",
+			});
 			const data = await res.json();
 
 			if (!data.ok) {
@@ -299,6 +322,7 @@ export default function Dashboard({
 						pairingVerifying={pairingVerifying || vehicleLoading}
 						onVerifyPairing={onVerifyPairing}
 						onConfirmPairing={handleVerifyAndConfirm}
+						lightControls={lightControls}
 					/>
 				</div>
 
@@ -318,7 +342,11 @@ export default function Dashboard({
 						onClimateOff={noop}
 					/>
 					<div className="model-stage">
-						<Model_3></Model_3>
+						<Model_3
+							lightControls={lightControls}
+						>
+
+						</Model_3>
 					</div>
 				</div>
 			</div>

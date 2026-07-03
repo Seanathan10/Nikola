@@ -14,6 +14,11 @@ type Props = {
 	pairingVerifying: boolean;
 	onVerifyPairing: () => void;
 	onConfirmPairing: () => void;
+
+	lightControls: React.MutableRefObject<{
+		spot: { x: number; y: number; z: number; i: number };
+		point: { x: number; y: number; z: number; i: number };
+	}>;
 };
 
 const DASH = "—";
@@ -31,17 +36,10 @@ export default function VehicleStatus({
 	pairingVerifying,
 	onVerifyPairing,
 	onConfirmPairing,
+	lightControls
 }: Props) {
 	const v = vehicle;
 	const [flowOpen, setFlowOpen] = useState(false);
-
-	const [SpotLightX, setSpotLightX] = useState(0);
-	const [SpotLightZ, setSpotLightZ] = useState(0);
-	const [SpotLightY, setSpotLightY] = useState(0);
-
-	const [PointLightX, setPointLightX] = useState(0);
-	const [PointLightY, setPointLightY] = useState(0);
-	const [PointLightZ, setPointLightZ] = useState(0);
 
 	const driveLabel = v
 		? ({
@@ -181,47 +179,86 @@ export default function VehicleStatus({
 
 			<div className="inputs">
 				<input
-					id="spotlightx"
 					type="range"
-					min="0"
-					max="360"
-					onChange={(e) => setSpotLightX(e.target.value)}
-				></input>
+					min={-10}
+					max={10}
+					step={0.1}
+					defaultValue={-4}
+					onChange={(e) =>
+						(lightControls.current.spot.x = Number(e.target.value))
+					}
+				/>
 				<input
-					id="spotlighty"
 					type="range"
-					min="0"
-					max="360"
-					onChange={(e) => setSpotLightY(e.target.value)}
-				></input>
+					min={0}
+					max={15}
+					step={0.1}
+					defaultValue={6}
+					onChange={(e) =>
+						(lightControls.current.spot.y = Number(e.target.value))
+					}
+				/>
 				<input
-					id="spotlightz"
 					type="range"
-					min="0"
-					max="360"
-					onChange={(e) => setSpotLightZ(e.target.value)}
-				></input>
+					min={-10}
+					max={10}
+					step={0.1}
+					defaultValue={4}
+					onChange={(e) =>
+						(lightControls.current.spot.z = Number(e.target.value))
+					}
+				/>
+
 				<input
-					id="pointlightx"
 					type="range"
-					min="0"
-					max="360"
-					onChange={(e) => setPointLightX(e.target.value)}
-				></input>
+					min={-10}
+					max={10}
+					step={0.1}
+					defaultValue={4}
+					onChange={(e) =>
+						(lightControls.current.point.x = Number(e.target.value))
+					}
+				/>
 				<input
-					id="pointlighty"
 					type="range"
-					min="0"
-					max="360"
-					onChange={(e) => setPointLightY(e.target.value)}
-				></input>
+					min={0}
+					max={10}
+					step={0.1}
+					defaultValue={3}
+					onChange={(e) =>
+						(lightControls.current.point.y = Number(e.target.value))
+					}
+				/>
 				<input
-					id="pointlightz"
 					type="range"
-					min="0"
-					max="360"
-					onChange={(e) => setPointLightZ(e.target.value)}
-				></input>
+					min={-10}
+					max={10}
+					step={0.1}
+					defaultValue={-3}
+					onChange={(e) =>
+						(lightControls.current.point.z = Number(e.target.value))
+					}
+				/>
+				<input
+					type="range"
+					min={-10}
+					max={10}
+					step={0.1}
+					defaultValue={-3}
+					onChange={(e) =>
+						(lightControls.current.spot.i = Number(e.target.value))
+					}
+				/>
+				<input
+					type="range"
+					min={-10}
+					max={10}
+					step={0.1}
+					defaultValue={-3}
+					onChange={(e) =>
+						(lightControls.current.point.i = Number(e.target.value))
+					}
+				/>
 			</div>
 		</section>
 	);

@@ -1,15 +1,13 @@
 import { useLayoutEffect, Suspense } from "react";
 import { Canvas, useLoader } from "@react-three/fiber";
-import {
-	Environment,
-	useGLTF,
-	SpotLight,
-} from "@react-three/drei";
+import { Environment, useGLTF, SpotLight } from "@react-three/drei";
 import * as THREE from "three";
 import { RepeatWrapping } from "three";
 
 import { CameraControls } from "@react-three/drei";
 import { Center } from "@react-three/drei";
+import { useFrame } from "@react-three/fiber";
+import { useRef } from "react";
 
 const MODEL_PATH = "/tesla-model-3-2024/source/2024_tesla_model_3.glb";
 
@@ -66,10 +64,29 @@ function TeslaModel() {
 	return <primitive object={scene} />;
 }
 
-function DramaticSpotlight() {
+function DramaticSpotlight({
+	lightControls,
+}: {
+	lightControls: LightControls;
+}) {
+	const spotRef = useRef<THREE.SpotLight>(null);
+	const pointRef = useRef<THREE.PointLight>(null);
+
+	useFrame(() => {
+		if (spotRef.current) {
+			const { x, y, z } = lightControls.current.spot;
+			spotRef.current.position.set(x, y, z);
+		}
+		if (pointRef.current) {
+			const { x, y, z } = lightControls.current.point;
+			pointRef.current.position.set(x, y, z);
+		}
+	});
+
 	return (
 		<>
 			<SpotLight
+				ref={spotRef}
 				position={[-4, 6, 4]}
 				target-position={[0, 0.5, 0]}
 				angle={0.35}
@@ -82,6 +99,7 @@ function DramaticSpotlight() {
 				anglePower={4}
 			/>
 			<pointLight
+				ref={pointRef}
 				position={[4, 3, -3]}
 				intensity={8}
 				color="#c8d8ff"
@@ -93,7 +111,12 @@ function DramaticSpotlight() {
 
 useGLTF.preload(MODEL_PATH);
 
-export function Model_3() {
+type LightControls = React.MutableRefObject<{
+	spot: { x: number; y: number; z: number; i: number };
+	point: { x: number; y: number; z: number; i: number };
+}>;
+
+export function Model_3({ lightControls }: { lightControls: LightControls }) {
 	return (
 		<Canvas
 			shadows
@@ -114,7 +137,7 @@ export function Model_3() {
 			<Environment preset="warehouse" environmentIntensity={0.3} />
 
 			<Suspense fallback={null}>
-				<DramaticSpotlight />
+				<DramaticSpotlight lightControls={lightControls}/>
 				<Center disableY>
 					<TeslaModel />
 				</Center>
