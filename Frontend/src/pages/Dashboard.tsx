@@ -13,8 +13,9 @@ import type {
 
 import "../css/Dashboard.css";
 
+import { Model_3 } from "./TeslaModel3";
+
 const API = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
-const PAIRING_URL = "https://tesla.com/_ak/nikola.byseansingh.com";
 
 type Props = {
 	onLogout: () => void;
@@ -24,66 +25,6 @@ type Props = {
 	onConfirmPairing: () => void;
 };
 
-function PairingBanner({
-	pairing,
-	verifying,
-	onVerify,
-	onConfirm,
-}: {
-	pairing: PairingCheck | null;
-	verifying: boolean;
-	onVerify: () => void;
-	onConfirm: () => void;
-}) {
-	const [flowOpen, setFlowOpen] = useState(false);
-
-	if (verifying && !pairing) return <p>Checking virtual key pairing...</p>;
-
-	if (!pairing || pairing.error) {
-		return (
-			<p>
-				Virtual key: unknown &nbsp;
-				<button onClick={onVerify} disabled={verifying}>
-					Check
-				</button>
-			</p>
-		);
-	}
-
-	if (pairing.status === "paired") {
-		return <p>Virtual key: paired</p>;
-	}
-
-	return (
-		<div>
-			<p>
-				Virtual key: not paired &nbsp;
-				<button onClick={() => setFlowOpen((o) => !o)}>
-					{flowOpen ? "Hide" : "Pair virtual key"}
-				</button>
-			</p>
-
-			{flowOpen && (
-				<div>
-					<p>
-						Open the link below on your phone. The Tesla app will
-						prompt you to add Nikola as a trusted key for your
-						vehicle. Then come back and confirm.
-					</p>
-					<a href={PAIRING_URL} target="_blank" rel="noreferrer">
-						<button>Open Tesla app to pair</button>
-					</a>
-					&nbsp;
-					<button onClick={onConfirm} disabled={verifying}>
-						{verifying
-							? "Waking car & verifying… (up to 10 s)"
-							: "I've paired it"}
-					</button>
-				</div>
-			)}
-		</div>
-	);
-}
 
 export default function Dashboard({
 	onLogout,
@@ -103,6 +44,8 @@ export default function Dashboard({
 	const [vehicleAsleep, setVehicleAsleep] = useState(false);
 	const [isWaking, setIsWaking] = useState(false);
 
+
+
 	const fetchVehicleState = useCallback(async () => {
 		setVehicleLoading(true);
 		try {
@@ -115,7 +58,7 @@ export default function Dashboard({
 				setError(null);
 			} else if (data.status === "asleep") {
 				setVehicleAsleep(true);
-				setError("Vehicle is sleeping");
+				setError(null);
 			} else if (data.status === "unreachable") {
 				setError(
 					"Vehicle is unreachable - server error or vehicle has no connection.",
@@ -343,13 +286,6 @@ export default function Dashboard({
 				<button onClick={onLogout}>Log Out</button>
 			</header>
 
-			<PairingBanner
-				pairing={pairing}
-				verifying={pairingVerifying || vehicleLoading}
-				onVerify={onVerifyPairing}
-				onConfirm={handleVerifyAndConfirm}
-			/>
-
 			{error && <p>{error}</p>}
 
 			<div className="dashboard-main">
@@ -358,6 +294,11 @@ export default function Dashboard({
 						vehicle={vehicleState}
 						loading={vehicleLoading}
 						wakeStatus={wakeStatus}
+						asleep={vehicleAsleep}
+						pairing={pairing}
+						pairingVerifying={pairingVerifying || vehicleLoading}
+						onVerifyPairing={onVerifyPairing}
+						onConfirmPairing={handleVerifyAndConfirm}
 					/>
 				</div>
 
@@ -377,7 +318,7 @@ export default function Dashboard({
 						onClimateOff={noop}
 					/>
 					<div className="model-stage">
-						<span>model 3</span>
+						<Model_3></Model_3>
 					</div>
 				</div>
 			</div>
