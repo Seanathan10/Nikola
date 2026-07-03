@@ -95,6 +95,7 @@ export default function Dashboard({
 	const [chargeHistory, setChargeHistory] =
 		useState<ChargeHistoryType | null>(null);
 	const [historyLoading, setHistoryLoading] = useState(false);
+	const [historyOpen, setHistoryOpen] = useState(false);
 	const [vehicleState, setVehicleState] = useState<VehicleState | null>(null);
 	const [vehicleLoading, setVehicleLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -168,6 +169,15 @@ export default function Dashboard({
 			return () => clearTimeout(timer);
 		}
 	}, [pairing, vehicleState, fetchVehicleState]);
+
+	useEffect(() => {
+		if (!historyOpen) return;
+		const onKey = (e: KeyboardEvent) => {
+			if (e.key === "Escape") setHistoryOpen(false);
+		};
+		window.addEventListener("keydown", onKey);
+		return () => window.removeEventListener("keydown", onKey);
+	}, [historyOpen]);
 
 	const handleVerifyAndConfirm = async () => {
 		setVehicleLoading(true);
@@ -342,39 +352,70 @@ export default function Dashboard({
 
 			{error && <p>{error}</p>}
 
-			<div className="dashboard-top">
-				<VehicleStatus
-					vehicle={vehicleState}
-					loading={vehicleLoading}
-					wakeStatus={wakeStatus}
-				/>
-				<QuickControls
-					disabled={vehicleAsleep}
-					waking={isWaking}
-					onWake={handleWake}
-					onLock={noop}
-					onUnlock={noop}
-					onFlash={handleFlash}
-					onCPLatch={handleCPLatch}
-					onCP={handleCP}
-					onTrunk={handleTrunk}
-					onFrunk={noop}
-					onClimateOn={noop}
-					onClimateOff={noop}
-				/>
+			<div className="dashboard-main">
+				<div className="dashboard-left">
+					<VehicleStatus
+						vehicle={vehicleState}
+						loading={vehicleLoading}
+						wakeStatus={wakeStatus}
+					/>
+				</div>
+
+				<div className="dashboard-right">
+					<QuickControls
+						disabled={vehicleAsleep}
+						waking={isWaking}
+						onWake={handleWake}
+						onLock={noop}
+						onUnlock={noop}
+						onFlash={handleFlash}
+						onCPLatch={handleCPLatch}
+						onCP={handleCP}
+						onTrunk={handleTrunk}
+						onFrunk={noop}
+						onClimateOn={noop}
+						onClimateOff={noop}
+					/>
+					<div className="model-stage">
+						<span>model 3</span>
+					</div>
+				</div>
 			</div>
 
 			<div className="dashboard-stats">
 				<ChargeStats vehicle={vehicleState} />
+				<button
+					className="history-trigger"
+					onClick={() => setHistoryOpen(true)}
+				>
+					Charging History
+				</button>
 			</div>
 
-			<div className="dashboard-bottom">
-				<ChargeHistory
-					sessions={chargeHistory?.data ?? null}
-					loading={historyLoading}
-					onFetch={fetchChargeHistory}
-				/>
-			</div>
+			{historyOpen && (
+				<div
+					className="modal-backdrop"
+					onClick={() => setHistoryOpen(false)}
+				>
+					<div
+						className="modal-panel"
+						onClick={(e) => e.stopPropagation()}
+					>
+						<button
+							className="modal-close"
+							aria-label="Close"
+							onClick={() => setHistoryOpen(false)}
+						>
+							×
+						</button>
+						<ChargeHistory
+							sessions={chargeHistory?.data ?? null}
+							loading={historyLoading}
+							onFetch={fetchChargeHistory}
+						/>
+					</div>
+				</div>
+			)}
 		</div>
 	);
 }

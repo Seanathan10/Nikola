@@ -1,6 +1,5 @@
 .controls-grid {
-	display: grid;
-	grid-template-columns: repeat(3, auto);
+	display: flex;
+	flex-wrap: wrap;
 	gap: 8px;
-	width: fit-content;
 }

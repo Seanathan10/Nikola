@@ -74,7 +74,7 @@ export default function App() {
 				return;
 			}
 			if ( data.has_tesla_tokens === false ) {
-				setError( "Dev login succeeded, but this user has no Tesla tokens — do a real login once (via tunnel) for live vehicle data." );
+				setError( "Dev login worked, but no Tesla tokens available." );
 			}
 			const status = await fetch( `${ API }/api/auth/status`, { credentials: "include" } ).then( r => r.json() );
 			setAuthStatus( status );
