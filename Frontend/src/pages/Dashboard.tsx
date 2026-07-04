@@ -43,11 +43,21 @@ export default function Dashboard({
 	const [vehicleAsleep, setVehicleAsleep] = useState(false);
 	const [isWaking, setIsWaking] = useState(false);
 
+
 	const lightControls = useRef({
-		spot: { x: -4, y: 6, z: 4, i: 600, on: true },
-		point: { x: 4, y: 3, z: -3, i: 8, on: true },
-		ambient: { i: 0.4, on: true },
-		env: { i: 0.3, on: true },
+		spot: {
+			x: 0,
+			y: 6,
+			z: 6,
+			tx: 0,
+			ty: 1,
+			tz: 1.2,
+			i: 600,
+			angle: 35,
+			penumbra: 0.4,
+			on: true,
+		},
+		env: { i: 0.4, on: true },
 	});
 
 	const fetchVehicleState = useCallback(async () => {

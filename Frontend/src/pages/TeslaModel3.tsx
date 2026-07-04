@@ -1,6 +1,6 @@
 import { useLayoutEffect, Suspense } from "react";
 import { Canvas, useLoader } from "@react-three/fiber";
-import { Environment, useGLTF, SpotLight } from "@react-three/drei";
+import { Environment, useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 import { RepeatWrapping } from "three";
 
@@ -64,33 +64,70 @@ function TeslaModel() {
 	return <primitive object={scene} />;
 }
 
-function SceneLights({
-	lightControls,
+type Vec3 = [number, number, number];
+
+function FixedSpotlight({
+	name,
+	position,
+	target,
+	angle,
+	penumbra,
+	intensity,
 }: {
-	lightControls: LightControls;
+	name: string;
+	position: Vec3;
+	target: Vec3;
+	angle: number;
+	penumbra: number;
+	intensity: number;
 }) {
 	const spotRef = useRef<THREE.SpotLight>(null);
-	const pointRef = useRef<THREE.PointLight>(null);
-	const ambientRef = useRef<THREE.AmbientLight>(null);
+	const targetRef = useRef<THREE.Object3D>(null);
+
+	useLayoutEffect(() => {
+		if (spotRef.current && targetRef.current) {
+			spotRef.current.target = targetRef.current;
+			targetRef.current.updateMatrixWorld();
+		}
+	}, []);
+
+	return (
+		<>
+			<spotLight
+				ref={spotRef}
+				name={name}
+				position={position}
+				angle={THREE.MathUtils.degToRad(angle)}
+				penumbra={penumbra}
+				intensity={intensity}
+				color="#fff5e0"
+				distance={25}
+				decay={2}
+			/>
+			<object3D ref={targetRef} position={target} />
+		</>
+	);
+}
+
+function SceneLights({ lightControls }: { lightControls: LightControls }) {
+	const spotRef = useRef<THREE.SpotLight>(null);
+	const targetRef = useRef<THREE.Object3D>(null);
 	const scene = useThree((state) => state.scene);
 
 	useFrame(() => {
-		if (spotRef.current) {
-			const { x, y, z, i, on } = lightControls.current.spot;
+		if (spotRef.current && targetRef.current) {
+			const { x, y, z, tx, ty, tz, i, angle, penumbra, on } =
+				lightControls.current.spot;
+
 			spotRef.current.position.set(x, y, z);
 			spotRef.current.intensity = i;
+			spotRef.current.angle = THREE.MathUtils.degToRad(angle);
+			spotRef.current.penumbra = penumbra;
 			spotRef.current.visible = on;
-		}
-		if (pointRef.current) {
-			const { x, y, z, i, on } = lightControls.current.point;
-			pointRef.current.position.set(x, y, z);
-			pointRef.current.intensity = i;
-			pointRef.current.visible = on;
-		}
-		if (ambientRef.current) {
-			const { i, on } = lightControls.current.ambient;
-			ambientRef.current.intensity = i;
-			ambientRef.current.visible = on;
+
+			spotRef.current.target = targetRef.current;
+			targetRef.current.position.set(tx, ty, tz);
+			targetRef.current.updateMatrixWorld();
 		}
 
 		const env = lightControls.current.env;
@@ -99,27 +136,17 @@ function SceneLights({
 
 	return (
 		<>
-			<ambientLight ref={ambientRef} intensity={0.4} color="#ffffff" />
-			<SpotLight
+			<spotLight
 				ref={spotRef}
-				position={[-4, 6, 4]}
-				target-position={[0, 0.5, 0]}
-				angle={0.35}
+				position={[0, 6, 6]}
+				angle={THREE.MathUtils.degToRad(35)}
 				penumbra={0.4}
 				intensity={600}
 				color="#fff5e0"
-				castShadow
-				distance={20}
-				attenuation={6}
-				anglePower={4}
+				distance={25}
+				decay={2}
 			/>
-			<pointLight
-				ref={pointRef}
-				position={[4, 3, -3]}
-				intensity={8}
-				color="#c8d8ff"
-				distance={15}
-			/>
+			<object3D ref={targetRef} position={[0, 1, 1.2]} />
 		</>
 	);
 }
@@ -127,9 +154,18 @@ function SceneLights({
 useGLTF.preload(MODEL_PATH);
 
 export type LightControls = React.MutableRefObject<{
-	spot: { x: number; y: number; z: number; i: number; on: boolean };
-	point: { x: number; y: number; z: number; i: number; on: boolean };
-	ambient: { i: number; on: boolean };
+	spot: {
+		x: number;
+		y: number;
+		z: number;
+		tx: number;
+		ty: number;
+		tz: number;
+		i: number;
+		angle: number;
+		penumbra: number;
+		on: boolean;
+	};
 	env: { i: number; on: boolean };
 }>;
 
@@ -149,10 +185,42 @@ export function Model_3({ lightControls }: { lightControls: LightControls }) {
 
 			<color attach="background" args={["#1a1a1a"]} />
 
-			<Environment preset="warehouse" environmentIntensity={0.3} />
+			<Environment preset="warehouse" environmentIntensity={0.4} />
 
 			<Suspense fallback={null}>
-				<SceneLights lightControls={lightControls}/>
+				<SceneLights lightControls={lightControls} />
+				<FixedSpotlight
+					name="overhead spotlight"
+					position={[5.7, 10.7, -9.7]}
+					target={[3.3, 1, -5.4]}
+					angle={80}
+					penumbra={1}
+					intensity={940}
+				/>
+				<FixedSpotlight
+					name="side spotlight"
+					position={[-14, 3.6, 6.6]}
+					target={[6.4, 2.4, -2.9]}
+					angle={80}
+					penumbra={1}
+					intensity={940}
+				/>
+				<FixedSpotlight
+					name="front right spotlight"
+					position={[12, 3.6, 8.9]}
+					target={[6.4, 2.4, 5.3]}
+					angle={80}
+					penumbra={1}
+					intensity={940}
+				/>
+				<FixedSpotlight
+					name="rear left"
+					position={[-12, 3.6, -10.9]}
+					target={[6.4, 2.4, 5.3]}
+					angle={80}
+					penumbra={1}
+					intensity={940}
+				/>
 				<Center disableY>
 					<TeslaModel />
 				</Center>

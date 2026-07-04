@@ -36,6 +36,14 @@ function LightSlider({
 	defaultValue: number;
 	onChange: (value: number) => void;
 }) {
+	const [value, setValue] = useState(defaultValue);
+
+	const commit = (raw: number) => {
+		const clamped = Math.min(max, Math.max(min, raw));
+		setValue(clamped);
+		onChange(clamped);
+	};
+
 	return (
 		<label className="slider-row">
 			<span>{label}</span>
@@ -44,8 +52,22 @@ function LightSlider({
 				min={min}
 				max={max}
 				step={step}
-				defaultValue={defaultValue}
-				onChange={(e) => onChange(Number(e.target.value))}
+				value={value}
+				onChange={(e) => commit(Number(e.target.value))}
+			/>
+			<input
+				className="slider-value"
+				type="number"
+				min={min}
+				max={max}
+				step={step}
+				value={value}
+				onChange={(e) => {
+					const next = Number(e.target.value);
+					if (e.target.value !== "" && Number.isFinite(next)) {
+						commit(next);
+					}
+				}}
 			/>
 		</label>
 	);
@@ -237,7 +259,7 @@ export default function VehicleStatus({
 					min={-20}
 					max={20}
 					step={0.1}
-					defaultValue={-4}
+					defaultValue={0}
 					onChange={(v) => (lightControls.current.spot.x = v)}
 				/>
 				<LightSlider
@@ -253,68 +275,56 @@ export default function VehicleStatus({
 					min={-20}
 					max={20}
 					step={0.1}
-					defaultValue={4}
+					defaultValue={6}
 					onChange={(v) => (lightControls.current.spot.z = v)}
+				/>
+				<LightSlider
+					label="Target X"
+					min={-10}
+					max={10}
+					step={0.1}
+					defaultValue={0}
+					onChange={(v) => (lightControls.current.spot.tx = v)}
+				/>
+				<LightSlider
+					label="Target Y"
+					min={0}
+					max={10}
+					step={0.1}
+					defaultValue={1}
+					onChange={(v) => (lightControls.current.spot.ty = v)}
+				/>
+				<LightSlider
+					label="Target Z"
+					min={-10}
+					max={10}
+					step={0.1}
+					defaultValue={1.2}
+					onChange={(v) => (lightControls.current.spot.tz = v)}
+				/>
+				<LightSlider
+					label="Cone angle°"
+					min={5}
+					max={80}
+					step={1}
+					defaultValue={35}
+					onChange={(v) => (lightControls.current.spot.angle = v)}
+				/>
+				<LightSlider
+					label="Penumbra"
+					min={0}
+					max={1}
+					step={0.05}
+					defaultValue={0.4}
+					onChange={(v) => (lightControls.current.spot.penumbra = v)}
 				/>
 				<LightSlider
 					label="Spot intensity"
 					min={0}
-					max={2000}
+					max={3000}
 					step={10}
 					defaultValue={600}
 					onChange={(v) => (lightControls.current.spot.i = v)}
-				/>
-
-				<LightToggle
-					label="Point light"
-					defaultChecked={lightControls.current.point.on}
-					onChange={(on) => (lightControls.current.point.on = on)}
-				/>
-				<LightSlider
-					label="Point X"
-					min={-20}
-					max={20}
-					step={0.1}
-					defaultValue={4}
-					onChange={(v) => (lightControls.current.point.x = v)}
-				/>
-				<LightSlider
-					label="Point Y"
-					min={0}
-					max={20}
-					step={0.1}
-					defaultValue={3}
-					onChange={(v) => (lightControls.current.point.y = v)}
-				/>
-				<LightSlider
-					label="Point Z"
-					min={-20}
-					max={20}
-					step={0.1}
-					defaultValue={-3}
-					onChange={(v) => (lightControls.current.point.z = v)}
-				/>
-				<LightSlider
-					label="Point intensity"
-					min={0}
-					max={1000}
-					step={0.5}
-					defaultValue={8}
-					onChange={(v) => (lightControls.current.point.i = v)}
-				/>
-
-				<LightToggle
-					label="Ambient light"
-					defaultChecked={lightControls.current.ambient.on}
-					onChange={(on) => (lightControls.current.ambient.on = on)}
-				/>
-				<LightSlider
-					label="Ambient intensity"
-					min={0}
-					max={20}
-					step={0.05}
-					defaultValue={0.4}
-					onChange={(v) => (lightControls.current.ambient.i = v)}
 				/>
 
 				<LightToggle
@@ -327,7 +337,7 @@ export default function VehicleStatus({
 					min={0}
 					max={3}
 					step={0.05}
-					defaultValue={0.3}
+					defaultValue={0.4}
 					onChange={(v) => (lightControls.current.env.i = v)}
 				/>
 			</div>
