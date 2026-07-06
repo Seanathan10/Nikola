@@ -1,8 +1,12 @@
 import { useLayoutEffect, Suspense } from "react";
-import { Canvas, useLoader } from "@react-three/fiber";
-import { Environment, useGLTF } from "@react-three/drei";
+import { Canvas } from "@react-three/fiber";
+import {
+	Environment,
+	Lightformer,
+	MeshReflectorMaterial,
+	useGLTF,
+} from "@react-three/drei";
 import * as THREE from "three";
-import { RepeatWrapping } from "three";
 
 import { CameraControls } from "@react-three/drei";
 import { Center } from "@react-three/drei";
@@ -11,24 +15,17 @@ import { useRef } from "react";
 
 const MODEL_PATH = "/tesla-model-3-2024/source/2024_tesla_model_3.glb";
 
-const CONCRETE_BASE =
-	"https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/concrete_floor_02/concrete_floor_02_diff_1k.jpg";
-const CONCRETE_NORMAL =
-	"https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/concrete_floor_02/concrete_floor_02_nor_gl_1k.jpg";
-const CONCRETE_ROUGH =
-	"https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/concrete_floor_02/concrete_floor_02_rough_1k.jpg";
+
 
 function Ground() {
-	const [colorMap, normalMap, roughnessMap] = useLoader(THREE.TextureLoader, [
-		CONCRETE_BASE,
-		CONCRETE_NORMAL,
-		CONCRETE_ROUGH,
-	]);
+	const matRef = useRef<THREE.MeshStandardMaterial>(null);
 
-	[colorMap, normalMap, roughnessMap].forEach((t) => {
-		t.wrapS = t.wrapT = RepeatWrapping;
-		t.repeat.set(4, 4);
-	});
+	// The bright studio panels would otherwise light the floor into a grey slab.
+	// Muting the env contribution on this material only keeps the floor near-black,
+	// so what you see in it is the car's reflection.
+	useLayoutEffect(() => {
+		if (matRef.current) matRef.current.envMapIntensity = 0.05;
+	}, []);
 
 	return (
 		<mesh
@@ -36,15 +33,62 @@ function Ground() {
 			position={[0, -0.01, 0]}
 			receiveShadow
 		>
-			<planeGeometry args={[30, 30]} />
-			<meshStandardMaterial
-				map={colorMap}
-				normalMap={normalMap}
-				roughnessMap={roughnessMap}
-				roughness={0.8}
-				metalness={0.9}
+			<planeGeometry args={[120, 120]} />
+			<MeshReflectorMaterial
+				ref={matRef}
+				resolution={1024}
+				mixBlur={0.4}
+				mixStrength={60}
+				blur={[90, 40]}
+				mirror={1}
+				depthScale={1.1}
+				minDepthThreshold={0.4}
+				maxDepthThreshold={1.4}
+				color="#050506"
+				metalness={0.55}
+				roughness={0.45}
 			/>
 		</mesh>
+	);
+}
+
+// these are the long, smooth highlights that run down the flanks
+function StudioEnvironment() {
+	return (
+		<Environment resolution={512}>
+			<color attach="background" args={["#0b0b0d"]} />
+			{/* long overhead strip: the highlight running along the roof/hood */}
+			<Lightformer
+				form="rect"
+				intensity={9}
+				position={[0, 16, 2]}
+				rotation={[Math.PI / 2, 0, 0]}
+				scale={[28, 10, 1]}
+			/>
+			{/* side panels: broad gradient down each flank */}
+			<Lightformer
+				form="rect"
+				intensity={5}
+				position={[18, 6, 6]}
+				rotation={[0, -Math.PI / 2, 0]}
+				scale={[24, 8, 1]}
+			/>
+			<Lightformer
+				form="rect"
+				intensity={3}
+				position={[-18, 6, -4]}
+				rotation={[0, Math.PI / 2, 0]}
+				scale={[24, 8, 1]}
+			/>
+			{/* rim from behind, this one helps separates the car from the dark backdrop */}
+			<Lightformer
+				form="rect"
+				intensity={5}
+				position={[0, 7, -20]}
+				rotation={[0, 0, 0]}
+				scale={[20, 6, 1]}
+			/>
+		</Environment>
 	);
 }
 
@@ -56,7 +100,7 @@ function TeslaModel() {
 			if (obj.isMesh) {
 				obj.castShadow = true;
 				obj.receiveShadow = true;
-				obj.material.envMapIntensity = 0.8;
+				obj.material.envMapIntensity = 9;
 			}
 		});
 	}, [scene]);
@@ -73,6 +117,7 @@ function FixedSpotlight({
 	angle,
 	penumbra,
 	intensity,
+	castShadow = false,
 }: {
 	name: string;
 	position: Vec3;
@@ -80,6 +125,7 @@ function FixedSpotlight({
 	angle: number;
 	penumbra: number;
 	intensity: number;
+	castShadow?: boolean;
 }) {
 	const spotRef = useRef<THREE.SpotLight>(null);
 	const targetRef = useRef<THREE.Object3D>(null);
@@ -101,8 +147,12 @@ function FixedSpotlight({
 				penumbra={penumbra}
 				intensity={intensity}
 				color="#fff5e0"
-				distance={25}
+				distance={70}
 				decay={2}
+				castShadow={castShadow}
+				shadow-mapSize={[2048, 2048]}
+				shadow-bias={-0.0004}
+				shadow-normalBias={0.05}
 			/>
 			<object3D ref={targetRef} position={target} />
 		</>
@@ -170,57 +220,65 @@ export type LightControls = React.MutableRefObject<{
 }>;
 
 export function Model_3({ lightControls }: { lightControls: LightControls }) {
+	const slbrightness = 15000;
 	return (
 		<Canvas
 			shadows
 			dpr={[1, 1.5]}
-			camera={{ position: [-6, 3, 8], fov: 40 }}
+			camera={{ position: [24, 6, 22], fov: 38 }}
 			gl={{
 				alpha: false,
 				toneMapping: THREE.ACESFilmicToneMapping,
-				toneMappingExposure: 0.9,
+				toneMappingExposure: 1.15,
 			}}
 		>
-			<CameraControls></CameraControls>
+			<CameraControls
+				maxPolarAngle={Math.PI / 2 - 0.06}
+				minPolarAngle={0.15}
+				minDistance={14}
+				maxDistance={90}
+				truckSpeed={0}
+			/>
 
-			<color attach="background" args={["#1a1a1a"]} />
+			<color attach="background" args={["#0b0b0d"]} />
 
-			<Environment preset="warehouse" environmentIntensity={0.4} />
+			<StudioEnvironment />
 
 			<Suspense fallback={null}>
 				<SceneLights lightControls={lightControls} />
+
+				{/* Soft key from the camera's side, high and wide — shapes the
+				    hood and front fender without pooling on the floor. */}
 				<FixedSpotlight
-					name="overhead spotlight"
-					position={[5.7, 10.7, -9.7]}
-					target={[3.3, 1, -5.4]}
-					angle={80}
+					name="key spotlight"
+					position={[-13, 34, 15]}
+					target={[-2, 1.5, 2]}
+					angle={30}
 					penumbra={1}
-					intensity={940}
+					intensity={slbrightness}
 				/>
+				{/* Fill on the far flank, weaker, keeps the shadow side readable. */}
 				<FixedSpotlight
-					name="side spotlight"
-					position={[-14, 3.6, 6.6]}
-					target={[6.4, 2.4, -2.9]}
-					angle={80}
+					name="fill spotlight"
+					position={[14, 28, -11]}
+					target={[2, 1.5, -2]}
+					angle={34}
 					penumbra={1}
-					intensity={940}
+					intensity={slbrightness * 0.3}
 				/>
+				{/* Straight down from overhead. This is the only shadow caster:
+				    a side light throws the shadow away from the camera, so it
+				    vanishes from some orbit angles. */}
 				<FixedSpotlight
-					name="front right spotlight"
-					position={[12, 3.6, 8.9]}
-					target={[6.4, 2.4, 5.3]}
-					angle={80}
+					name="overhead shadow light"
+					position={[0, 45, 0]}
+					target={[0, 0, 0]}
+					angle={22}
 					penumbra={1}
-					intensity={940}
+					intensity={slbrightness * 0.8}
+					castShadow
 				/>
-				<FixedSpotlight
-					name="rear left"
-					position={[-12, 3.6, -10.9]}
-					target={[6.4, 2.4, 5.3]}
-					angle={80}
-					penumbra={1}
-					intensity={940}
-				/>
+
 				<Center disableY>
 					<TeslaModel />
 				</Center>

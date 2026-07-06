@@ -259,15 +259,15 @@ export default function VehicleStatus({
 					min={-20}
 					max={20}
 					step={0.1}
-					defaultValue={0}
+					defaultValue={11}
 					onChange={(v) => (lightControls.current.spot.x = v)}
 				/>
 				<LightSlider
 					label="Spot Y"
 					min={0}
-					max={20}
+					max={25}
 					step={0.1}
-					defaultValue={6}
+					defaultValue={14}
 					onChange={(v) => (lightControls.current.spot.y = v)}
 				/>
 				<LightSlider
@@ -275,7 +275,7 @@ export default function VehicleStatus({
 					min={-20}
 					max={20}
 					step={0.1}
-					defaultValue={6}
+					defaultValue={9.5}
 					onChange={(v) => (lightControls.current.spot.z = v)}
 				/>
 				<LightSlider
@@ -283,7 +283,7 @@ export default function VehicleStatus({
 					min={-10}
 					max={10}
 					step={0.1}
-					defaultValue={0}
+					defaultValue={4}
 					onChange={(v) => (lightControls.current.spot.tx = v)}
 				/>
 				<LightSlider
@@ -291,7 +291,7 @@ export default function VehicleStatus({
 					min={0}
 					max={10}
 					step={0.1}
-					defaultValue={1}
+					defaultValue={1.8}
 					onChange={(v) => (lightControls.current.spot.ty = v)}
 				/>
 				<LightSlider
@@ -299,7 +299,7 @@ export default function VehicleStatus({
 					min={-10}
 					max={10}
 					step={0.1}
-					defaultValue={1.2}
+					defaultValue={2.5}
 					onChange={(v) => (lightControls.current.spot.tz = v)}
 				/>
 				<LightSlider
@@ -307,7 +307,7 @@ export default function VehicleStatus({
 					min={5}
 					max={80}
 					step={1}
-					defaultValue={35}
+					defaultValue={26}
 					onChange={(v) => (lightControls.current.spot.angle = v)}
 				/>
 				<LightSlider
@@ -315,15 +315,15 @@ export default function VehicleStatus({
 					min={0}
 					max={1}
 					step={0.05}
-					defaultValue={0.4}
+					defaultValue={1}
 					onChange={(v) => (lightControls.current.spot.penumbra = v)}
 				/>
 				<LightSlider
 					label="Spot intensity"
 					min={0}
-					max={3000}
+					max={5000}
 					step={10}
-					defaultValue={600}
+					defaultValue={2600}
 					onChange={(v) => (lightControls.current.spot.i = v)}
 				/>
 
@@ -337,7 +337,7 @@ export default function VehicleStatus({
 					min={0}
 					max={3}
 					step={0.05}
-					defaultValue={0.4}
+					defaultValue={0.08}
 					onChange={(v) => (lightControls.current.env.i = v)}
 				/>
 			</div>
