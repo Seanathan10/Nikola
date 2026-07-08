@@ -45,27 +45,6 @@ export default function Dashboard({
 	const [isWaking, setIsWaking] = useState(false);
 	const [lightLabOpen, setLightLabOpen] = useState(false);
 
-
-
-	const lightControls = useRef({
-		spot: {
-			x: 11,
-			y: 14,
-			z: 9.5,
-			tx: 4,
-			ty: 1.8,
-			tz: 2.5,
-			i: 2600,
-			angle: 26,
-			penumbra: 1,
-			on: false,
-		},
-		env: { i: 0.12, on: true },
-		key: { i: 15000, on: true },
-		fill: { i: 4500, on: true },
-		overhead: { i: 12000, on: true },
-	});
-
 	const fetchVehicleState = useCallback(async () => {
 		setVehicleLoading(true);
 		try {
@@ -334,10 +313,7 @@ export default function Dashboard({
 			</header>
 
 			{lightLabOpen && (
-				<LightLab
-					lightControls={lightControls}
-					onClose={() => setLightLabOpen(false)}
-				/>
+				<LightLab onClose={() => setLightLabOpen(false)} />
 			)}
 
 			{error && <p>{error}</p>}
@@ -372,11 +348,7 @@ export default function Dashboard({
 						onClimateOff={noop}
 					/>
 					<div className="model-stage">
-						<Model_3
-							lightControls={lightControls}
-						>
-
-						</Model_3>
+						<Model_3 />
 					</div>
 				</div>
 			</div>

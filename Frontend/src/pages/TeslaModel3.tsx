@@ -8,9 +8,11 @@ import {
 } from "@react-three/drei";
 import * as THREE from "three";
 
+import { lightRig } from "../lightRig";
+
 import { CameraControls } from "@react-three/drei";
 import { Center } from "@react-three/drei";
-import { useFrame, useThree } from "@react-three/fiber";
+import { useFrame } from "@react-three/fiber";
 import { useRef } from "react";
 
 const MODEL_PATH = "/tesla-model-3-2024/source/2024_tesla_model_3.glb";
@@ -178,15 +180,15 @@ function FixedSpotlight({
 	);
 }
 
-function SceneLights({ lightControls }: { lightControls: LightControls }) {
+function SceneLights() {
 	const spotRef = useRef<THREE.SpotLight>(null);
 	const targetRef = useRef<THREE.Object3D>(null);
-	const scene = useThree((state) => state.scene);
 
-	useFrame(() => {
+
+	useFrame((state) => {
 		if (spotRef.current && targetRef.current) {
 			const { x, y, z, tx, ty, tz, i, angle, penumbra, on } =
-				lightControls.current.spot;
+				lightRig.spot;
 
 			spotRef.current.position.set(x, y, z);
 			spotRef.current.intensity = i;
@@ -199,8 +201,8 @@ function SceneLights({ lightControls }: { lightControls: LightControls }) {
 			targetRef.current.updateMatrixWorld();
 		}
 
-		const env = lightControls.current.env;
-		scene.environmentIntensity = env.on ? env.i : 0;
+		const env = lightRig.env;
+		state.scene.environmentIntensity = env.on ? env.i : 0;
 	});
 
 	return (
@@ -222,26 +224,7 @@ function SceneLights({ lightControls }: { lightControls: LightControls }) {
 
 useGLTF.preload(MODEL_PATH);
 
-export type LightControls = React.MutableRefObject<{
-	spot: {
-		x: number;
-		y: number;
-		z: number;
-		tx: number;
-		ty: number;
-		tz: number;
-		i: number;
-		angle: number;
-		penumbra: number;
-		on: boolean;
-	};
-	env: { i: number; on: boolean };
-	key: { i: number; on: boolean };
-	fill: { i: number; on: boolean };
-	overhead: { i: number; on: boolean };
-}>;
-
-export function Model_3({ lightControls }: { lightControls: LightControls }) {
+export function Model_3() {
 	const slbrightness = 15000;
 	return (
 		<Canvas
@@ -267,7 +250,7 @@ export function Model_3({ lightControls }: { lightControls: LightControls }) {
 			<StudioEnvironment />
 
 			<Suspense fallback={null}>
-				<SceneLights lightControls={lightControls} />
+				<SceneLights />
 
 				<FixedSpotlight
 					name="key spotlight"
@@ -276,7 +259,7 @@ export function Model_3({ lightControls }: { lightControls: LightControls }) {
 					angle={30}
 					penumbra={1}
 					intensity={slbrightness}
-					control={() => lightControls.current.key}
+					control={() => lightRig.key}
 				/>
 
 				<FixedSpotlight
@@ -286,7 +269,7 @@ export function Model_3({ lightControls }: { lightControls: LightControls }) {
 					angle={34}
 					penumbra={1}
 					intensity={slbrightness * 0.3}
-					control={() => lightControls.current.fill}
+					control={() => lightRig.fill}
 				/>
 
 				<FixedSpotlight
@@ -297,7 +280,7 @@ export function Model_3({ lightControls }: { lightControls: LightControls }) {
 					penumbra={1}
 					intensity={slbrightness * 0.8}
 					castShadow
-					control={() => lightControls.current.overhead}
+					control={() => lightRig.overhead}
 				/>
 
 				<Center disableY>
