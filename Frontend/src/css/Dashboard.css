@@ -9,7 +9,6 @@
 	text-align: left;
 	width: 100%;
 	box-sizing: border-box;
-	border: 2px solid var(--text-h);
 }
 
 .dashboard-header {
@@ -18,7 +17,7 @@
 	align-items: center;
 }
 
-/* two columns: narrow vehicle status | wide quick controls */
+
 .dashboard-main {
 	display: grid;
 	grid-template-columns: auto 1fr;
@@ -103,5 +102,16 @@
 
 	.dashboard-left {
 		min-width: 0;
+	}
+}
+
+
+.lightlab-trigger {
+	margin-left: auto;
+}
+
+@media (max-width: 900px) {
+	.lightlab-trigger {
+		display: none;
 	}
 }

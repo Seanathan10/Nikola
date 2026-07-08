@@ -1,4 +1,4 @@
-import { useLayoutEffect, Suspense } from "react";
+import { useLayoutEffect, useMemo, Suspense } from "react";
 import { Canvas } from "@react-three/fiber";
 import {
 	Environment,
@@ -17,16 +17,10 @@ const MODEL_PATH = "/tesla-model-3-2024/source/2024_tesla_model_3.glb";
 
 
 
+// for some reason, this material ignores envMapIntensity, aka the floor always takes the
+// full scene environment. for that reason i have set the global env to be very low
+// and later amplified it onto the car's paint instead
 function Ground() {
-	const matRef = useRef<THREE.MeshStandardMaterial>(null);
-
-	// The bright studio panels would otherwise light the floor into a grey slab.
-	// Muting the env contribution on this material only keeps the floor near-black,
-	// so what you see in it is the car's reflection.
-	useLayoutEffect(() => {
-		if (matRef.current) matRef.current.envMapIntensity = 0.05;
-	}, []);
-
 	return (
 		<mesh
 			rotation={[-Math.PI / 2, 0, 0]}
@@ -35,7 +29,6 @@ function Ground() {
 		>
 			<planeGeometry args={[120, 120]} />
 			<MeshReflectorMaterial
-				ref={matRef}
 				resolution={1024}
 				mixBlur={0.4}
 				mixStrength={60}
@@ -53,6 +46,19 @@ function Ground() {
 }
 
 // these are the long, smooth highlights that run down the flanks
+function ShadowCatcher() {
+	return (
+		<mesh
+			rotation={[-Math.PI / 2, 0, 0]}
+			position={[0, 0.015, 0]}
+			receiveShadow
+		>
+			<planeGeometry args={[60, 60]} />
+			<shadowMaterial transparent opacity={0.55} color="#000000" />
+		</mesh>
+	);
+}
+
 function StudioEnvironment() {
 	return (
 		<Environment resolution={512}>
@@ -95,17 +101,21 @@ function StudioEnvironment() {
 function TeslaModel() {
 	const { scene } = useGLTF(MODEL_PATH);
 
-	useLayoutEffect(() => {
-		scene.traverse((obj) => {
-			if (obj.isMesh) {
-				obj.castShadow = true;
-				obj.receiveShadow = true;
-				obj.material.envMapIntensity = 9;
-			}
-		});
-	}, [scene]);
+	// if u dont memoize it then the car does not persist between pages
+	// dumb but whatever, easy fix
+	const car = useMemo(() => scene.clone(true), [scene]);
 
-	return <primitive object={scene} />;
+	useLayoutEffect(() => {
+		car.traverse((obj) => {
+			const mesh = obj as THREE.Mesh;
+			if (!mesh.isMesh) return;
+			mesh.castShadow = true;
+			mesh.receiveShadow = true;
+			(mesh.material as THREE.MeshStandardMaterial).envMapIntensity = 9;
+		});
+	}, [car]);
+
+	return <primitive object={car} />;
 }
 
 type Vec3 = [number, number, number];
@@ -118,6 +128,7 @@ function FixedSpotlight({
 	penumbra,
 	intensity,
 	castShadow = false,
+	control,
 }: {
 	name: string;
 	position: Vec3;
@@ -126,6 +137,7 @@ function FixedSpotlight({
 	penumbra: number;
 	intensity: number;
 	castShadow?: boolean;
+	control?: () => { i: number; on: boolean };
 }) {
 	const spotRef = useRef<THREE.SpotLight>(null);
 	const targetRef = useRef<THREE.Object3D>(null);
@@ -136,6 +148,13 @@ function FixedSpotlight({
 			targetRef.current.updateMatrixWorld();
 		}
 	}, []);
+
+	useFrame(() => {
+		if (!control || !spotRef.current) return;
+		const { i, on } = control();
+		spotRef.current.intensity = i;
+		spotRef.current.visible = on;
+	});
 
 	return (
 		<>
@@ -217,6 +236,9 @@ export type LightControls = React.MutableRefObject<{
 		on: boolean;
 	};
 	env: { i: number; on: boolean };
+	key: { i: number; on: boolean };
+	fill: { i: number; on: boolean };
+	overhead: { i: number; on: boolean };
 }>;
 
 export function Model_3({ lightControls }: { lightControls: LightControls }) {
@@ -247,8 +269,6 @@ export function Model_3({ lightControls }: { lightControls: LightControls }) {
 			<Suspense fallback={null}>
 				<SceneLights lightControls={lightControls} />
 
-				{/* Soft key from the camera's side, high and wide — shapes the
-				    hood and front fender without pooling on the floor. */}
 				<FixedSpotlight
 					name="key spotlight"
 					position={[-13, 34, 15]}
@@ -256,8 +276,9 @@ export function Model_3({ lightControls }: { lightControls: LightControls }) {
 					angle={30}
 					penumbra={1}
 					intensity={slbrightness}
+					control={() => lightControls.current.key}
 				/>
-				{/* Fill on the far flank, weaker, keeps the shadow side readable. */}
+
 				<FixedSpotlight
 					name="fill spotlight"
 					position={[14, 28, -11]}
@@ -265,10 +286,9 @@ export function Model_3({ lightControls }: { lightControls: LightControls }) {
 					angle={34}
 					penumbra={1}
 					intensity={slbrightness * 0.3}
+					control={() => lightControls.current.fill}
 				/>
-				{/* Straight down from overhead. This is the only shadow caster:
-				    a side light throws the shadow away from the camera, so it
-				    vanishes from some orbit angles. */}
+
 				<FixedSpotlight
 					name="overhead shadow light"
 					position={[0, 45, 0]}
@@ -277,11 +297,13 @@ export function Model_3({ lightControls }: { lightControls: LightControls }) {
 					penumbra={1}
 					intensity={slbrightness * 0.8}
 					castShadow
+					control={() => lightControls.current.overhead}
 				/>
 
 				<Center disableY>
 					<TeslaModel />
 				</Center>
+				<ShadowCatcher />
 				<Ground />
 			</Suspense>
 		</Canvas>

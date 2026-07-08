@@ -14,6 +14,7 @@ import type {
 import "../css/Dashboard.css";
 
 import { Model_3 } from "./TeslaModel3";
+import LightLab from "./LightLab";
 
 const API = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
 
@@ -42,6 +43,7 @@ export default function Dashboard({
 	const [wakeStatus, setWakeStatus] = useState<string>("unknown");
 	const [vehicleAsleep, setVehicleAsleep] = useState(false);
 	const [isWaking, setIsWaking] = useState(false);
+	const [lightLabOpen, setLightLabOpen] = useState(false);
 
 
 
@@ -59,6 +61,9 @@ export default function Dashboard({
 			on: false,
 		},
 		env: { i: 0.12, on: true },
+		key: { i: 15000, on: true },
+		fill: { i: 4500, on: true },
+		overhead: { i: 12000, on: true },
 	});
 
 	const fetchVehicleState = useCallback(async () => {
@@ -319,8 +324,21 @@ export default function Dashboard({
 		<div className="dashboard">
 			<header className="dashboard-header">
 				<h1>Nikola</h1>
+				<button
+					className="lightlab-trigger"
+					onClick={() => setLightLabOpen(true)}
+				>
+					Light Lab
+				</button>
 				<button onClick={onLogout}>Log Out</button>
 			</header>
+
+			{lightLabOpen && (
+				<LightLab
+					lightControls={lightControls}
+					onClose={() => setLightLabOpen(false)}
+				/>
+			)}
 
 			{error && <p>{error}</p>}
 
@@ -335,7 +353,6 @@ export default function Dashboard({
 						pairingVerifying={pairingVerifying || vehicleLoading}
 						onVerifyPairing={onVerifyPairing}
 						onConfirmPairing={handleVerifyAndConfirm}
-						lightControls={lightControls}
 					/>
 				</div>
 
