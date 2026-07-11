@@ -5,10 +5,15 @@ import {
 	Lightformer,
 	MeshReflectorMaterial,
 	useGLTF,
+	useTexture,
 } from "@react-three/drei";
 import * as THREE from "three";
 
 import { lightRig } from "../lightRig";
+import { EffectComposer, Bloom } from "@react-three/postprocessing";
+
+import { applyCircuits, tuneMaterial, TEXTURES } from "../Materials";
+import type { Textures } from "../Materials";
 
 import { CameraControls } from "@react-three/drei";
 import { Center } from "@react-three/drei";
@@ -20,9 +25,9 @@ const MODEL_PATH = "/tesla-model-3-2024/source/Untitled.glb";
 
 
 
-// for some reason, this material ignores envMapIntensity, aka the floor always takes the
-// full scene environment. for that reason i have set the global env to be very low
-// and later amplified it onto the car's paint instead
+// for some reason, this material ignores envMapIntensity, aka the floor always nabs the
+// full scene. therefore i have set the global env to be very low
+// and later amplified it onto the car's paint
 function Ground() {
 	return (
 		<mesh
@@ -48,7 +53,7 @@ function Ground() {
 	);
 }
 
-// these are the long, smooth highlights that run down the flanks
+// this is for the ground
 function ShadowCatcher() {
 	return (
 		<mesh
@@ -107,19 +112,31 @@ const GROUND_OFFSET = -0.04 * MODEL_SCALE;
 function TeslaModel() {
 	const { scene } = useGLTF(MODEL_PATH);
 
+	const tex = useTexture( TEXTURES ) as Textures;
+
 	// if u dont memoize it then the car does not persist between pages
 	// dumb but whatever, easy fix
 	const car = useMemo(() => scene.clone(true), [scene]);
 
 	useLayoutEffect(() => {
+		// without this flipping disable, the lighting bleeds
+		// very heavily into the wheel wells
+		for (const t of Object.values(tex)) {
+			t.flipY = false;
+			t.needsUpdate = true;
+		}
+
 		car.traverse((obj) => {
 			const mesh = obj as THREE.Mesh;
 			if (!mesh.isMesh) return;
 			mesh.castShadow = true;
 			mesh.receiveShadow = true;
-			(mesh.material as THREE.MeshStandardMaterial).envMapIntensity = 9;
+
+			tuneMaterial(mesh.material as THREE.MeshPhysicalMaterial, tex);
 		});
-	}, [car]);
+	}, [car, tex]);
+
+	useFrame(() => applyCircuits());
 
 	return (
 		<primitive
@@ -299,6 +316,16 @@ export function Model_3() {
 				<ShadowCatcher />
 				<Ground />
 			</Suspense>
+
+			<EffectComposer>
+				<Bloom
+					luminanceThreshold={0.9}
+					luminanceSmoothing={0.15}
+					intensity={1.4}
+					radius={0.7}
+					mipmapBlur
+				/>
+			</EffectComposer>
 		</Canvas>
 	);
 }

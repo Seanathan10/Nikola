@@ -2,6 +2,9 @@ import { useState } from "react";
 
 import { Model_3 } from "./TeslaModel3";
 import { lightRig } from "../lightRig";
+import { Headlights } from "../LightSwitches";
+import { Taillights } from "../LightSwitches";
+import { HeadAndTailLights } from "../LightSwitches";
 import "../css/LightLab.css";
 
 type Props = {
@@ -98,6 +101,27 @@ export default function LightLab({ onClose }: Props) {
 				</div>
 
 				<div className="lightlab-panel">
+					<button
+						className="lightlab-action"
+						onClick={() => Headlights()}
+					>
+						Flash Headlights
+					</button>
+
+					<button
+						className="lightlab-action"
+						onClick={() => Taillights()}
+					>
+						Flash Taillights
+					</button>
+
+					<button
+						className="lightlab-action"
+						onClick={() => HeadAndTailLights()}
+					>
+						Flash All
+					</button>
+
 					<LightToggle
 						label="Key spotlight"
 						defaultChecked={lightRig.key.on}

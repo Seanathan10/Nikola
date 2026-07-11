@@ -74,8 +74,13 @@
 	padding: 2px 4px;
 }
 
-/* The lab is a desktop-only tool — the sliders and the 3D stage don't fit,
-   and the entry point is hidden at these widths too. */
+.lightlab-panel .lightlab-action {
+	width: 100%;
+	margin-bottom: 4px;
+	font-size: 12px;
+	font-weight: 600;
+}
+
 @media (max-width: 900px) {
 	.lightlab {
 		display: none;
