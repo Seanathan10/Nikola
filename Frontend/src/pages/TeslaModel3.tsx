@@ -15,7 +15,8 @@ import { Center } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import { useRef } from "react";
 
-const MODEL_PATH = "/tesla-model-3-2024/source/2024_tesla_model_3.glb";
+// const MODEL_PATH = "/tesla-model-3-2024/source/2024_tesla_model_3.glb";
+const MODEL_PATH = "/tesla-model-3-2024/source/Untitled.glb";
 
 
 
@@ -100,6 +101,9 @@ function StudioEnvironment() {
 	);
 }
 
+const MODEL_SCALE = 3.9;
+const GROUND_OFFSET = -0.04 * MODEL_SCALE;
+
 function TeslaModel() {
 	const { scene } = useGLTF(MODEL_PATH);
 
@@ -117,7 +121,13 @@ function TeslaModel() {
 		});
 	}, [car]);
 
-	return <primitive object={car} />;
+	return (
+		<primitive
+			object={car}
+			scale={MODEL_SCALE}
+			position={[0, GROUND_OFFSET, 0]}
+		/>
+	);
 }
 
 type Vec3 = [number, number, number];
