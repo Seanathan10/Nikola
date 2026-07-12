@@ -1,24 +1,48 @@
-import { useLayoutEffect, useMemo, Suspense } from "react";
-import { Canvas } from "@react-three/fiber";
 import {
-	Environment,
-	Lightformer,
-	MeshReflectorMaterial,
+	useRef,
+	useMemo,
+	Suspense,
+	useLayoutEffect
+} from "react";
+
+import {
+	Canvas,
+	useFrame
+} from "@react-three/fiber";
+
+import {
+	Center,
 	useGLTF,
 	useTexture,
+	Environment,
+	Lightformer,
+	CameraControls,
+	MeshReflectorMaterial
 } from "@react-three/drei";
+
 import * as THREE from "three";
 
 import { lightRig } from "../lightRig";
-import { EffectComposer, Bloom } from "@react-three/postprocessing";
 
-import { applyCircuits, tuneMaterial, TEXTURES } from "../Materials";
+import {
+	EffectComposer,
+	Bloom
+} from "@react-three/postprocessing";
+
+import {
+	applyCircuits,
+	tuneMaterial,
+	TEXTURES
+} from "../Materials";
+
 import type { Textures } from "../Materials";
 
-import { CameraControls } from "@react-three/drei";
-import { Center } from "@react-three/drei";
-import { useFrame } from "@react-three/fiber";
-import { useRef } from "react";
+import {
+	addTires,
+	HUB_HEIGHT,
+	TIRE_RADIUS
+} from "../tires";
+
 
 // const MODEL_PATH = "/tesla-model-3-2024/source/2024_tesla_model_3.glb";
 const MODEL_PATH = "/tesla-model-3-2024/source/Untitled.glb";
@@ -107,7 +131,10 @@ function StudioEnvironment() {
 }
 
 const MODEL_SCALE = 3.9;
-const GROUND_OFFSET = -0.04 * MODEL_SCALE;
+
+// the car rolls on its tyres now, not its rims: the contact patch is one tyre-radius below
+// the hubs, and this drops that patch onto the floor
+const GROUND_OFFSET = -(HUB_HEIGHT - TIRE_RADIUS) * MODEL_SCALE;
 
 function TeslaModel() {
 	const { scene } = useGLTF(MODEL_PATH);
@@ -134,7 +161,9 @@ function TeslaModel() {
 
 			tuneMaterial(mesh.material as THREE.MeshPhysicalMaterial, tex);
 		});
-	}, [car, tex]);
+
+		addTires( car );
+	}, [ car, tex ]);
 
 	useFrame(() => applyCircuits());
 
